@@ -1,8 +1,7 @@
 #include "file_chuncker.h"
 #include <stdio.h>
 
-// Retorna o tamanho do arquivo, ou -1 em caso de erro
-static int tamanho_do_arquivo (FILE * file) {
+int tamanho_do_arquivo (FILE * file) {
     if (fseek(file, 0, SEEK_END) != 0) {
         printf("Erro ao navegar no arquivo.\n");
         return -1;

@@ -10,6 +10,9 @@ que serao enviados um por um ao servidor, e vice versa.
 
 #define CHUNCK_MAX_SIZE 117
 
+// Retorna o tamanho do arquivo file ou -1 em caso de erro.
+int tamanho_do_arquivo (FILE * file);
+
 // Extrai o chunck de tamanho tam, a partir do byte pos, do arquivo file.
 // Retorna 0 em caso de sucesso e -1 em caso de erro.
 int extrai_chunk (FILE * file, void * chunk, short tam, int pos);

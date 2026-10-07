@@ -1,6 +1,6 @@
 Este é o trabalho de redes 1 da UFPR 2026/2. 
 
-O objetivo é estabelecer uma comunicação entre um cliente e um servidor com o intúito de transferir arquivos.
+O objetivo é estabelecer uma comunicação entre um cliente e um servidor para transferir arquivos.
 O protocolo deve ser implementado utilizando raw_sockets sobre mensagens ethernet.
 
 O cliente pode rodar os comandos:

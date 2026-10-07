@@ -32,12 +32,11 @@ Sobre os tipos:
  - 7: (a definir)
  - 8: OK
  - 9: fim da transmissão
- - 10:
- - 11:
- - 12:
+ - 10: (a definir)
+ - 11: (a definir)
+ - 12: (a definir)
  - 13: Dados do arquivo
  - 14: Tamanho do arquivo
  - 15: Mostrar na tela
 
 A implementação de um timeout é obrigatória. Note que não há timeout para os tipos 0,1 e 2.
- - 

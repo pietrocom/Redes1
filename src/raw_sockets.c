@@ -42,3 +42,7 @@ int cria_raw_socket (char * nome_interface_rede) {
  
     return soquete;
 }
+
+void receive () {
+    
+}

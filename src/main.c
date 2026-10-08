@@ -7,7 +7,8 @@ Autores: Camila Shibata (GRR) e Pietro Comin (20241955)
 #include <stdio.h>
 #include <sys/socket.h>
 
-#define TAM_MAX_INPUT 150
+#include "input_parser.h"
+#include "raw_sockets.h"
 
 /* 
 Entradas:
@@ -21,14 +22,18 @@ int main (int argc, char * argv[]) {
         exit(1);
     }
 
+    int port = cria_raw_socket("enp0s31f6");
+
+    #ifdef CLIENTE
     int status = 1;
     char input [TAM_MAX_INPUT];
     while (status) {
         printf("> ");
         fgets(input, TAM_MAX_INPUT, stdin); printf("\n");
 
-
+        handle_input(&input);
     }
+    #endif
     
     return 0;
 }

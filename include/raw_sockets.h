@@ -7,4 +7,8 @@ Header do arquivo raw_sockets.c.
  
 int cria_raw_socket (char * nome_interface_rede);
 
+int run_client();
+
+int run_server();
+
 #endif

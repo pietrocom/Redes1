@@ -9,6 +9,10 @@ Este arquivo implementa as funcoes que manipulam raw sockets.
 #include <net/if.h>             // Interface de rede <-> indice kernel
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
+
+#include "protocol.h"
+#include "commands.h"
  
 int cria_raw_socket (char * nome_interface_rede) {
     // Cria arquivo para o socket sem qualquer protocolo
@@ -41,4 +45,78 @@ int cria_raw_socket (char * nome_interface_rede) {
     }
  
     return soquete;
+}
+
+int run_server() {
+
+    // Cria socket do servidor
+    int soquete = cria_raw_socket("lo");
+
+    // Buffer para chunks
+    unsigned char buffer[TAM_MAXIMO];
+
+    while(1) {
+
+        // Guarda mensagem recebida no buffer
+        int recebidos = recv(soquete, buffer, sizeof(buffer), 0);
+
+        if (recebidos) {
+            
+        }
+
+    }
+
+    return 0;
+}
+
+int run_client() {
+
+    // Cria socket do cliente
+    int soquete = cria_raw_socket("lo");
+
+    // Cria e zera um chunk
+    struct protocolo pacote;    
+    memset(&pacote, 0, sizeof(struct protocolo));
+
+    // Copia mensagem para parte de dados do chunk e guarda tamanho
+    strcpy((char *)pacote.dados, "Mensagem do pacote");
+    pacote.tamanho = strlen((char *)pacote.dados);
+
+    int total_enviar = TAM_MINIMO;
+
+    // Manda pacote
+    send(soquete, &pacote, total_enviar, 0);
+    printf("Pacote enviado\n");
+
+    char entrada[200];
+
+    while(1) {
+        printf(">> ");
+        
+        // Lê comando no terminal
+        fgets(entrada, sizeof(entrada), stdin);
+
+        // Tira quebra de linha do buffer
+        entrada[strcspn(entrada, "\n")] = 0;
+
+        if (strlen(entrada) == 0) continue;
+
+        if (strncmp(entrada, "lcd", 3) == 0) {
+
+            // Extrai caminho da entrada
+            char *path = entrada + 4;
+            lcd(path);
+
+        } else if (strcmp(entrada, "lls") == 0) {
+            
+            lls();
+        
+        } else if (strcmp(entrada, "exit") == 0) {
+            
+            break;
+        
+        } else printf("Comando não existe\n");
+    }
+
+    return 0;
 }

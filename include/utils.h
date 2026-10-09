@@ -10,4 +10,7 @@ struct protocolo build_message (uint8_t *endDestino, uint8_t *endOrigem, unsigne
 // Calcula paridade vertical da mensagem
 uint32_t calculo_paridade (struct protocolo *mensagem);
 
+// Retorna 1 se a mensagem estiver correta e 0 caso contrario
+int verifica_paridade (struct protocolo *mensagem) {
+
 #endif

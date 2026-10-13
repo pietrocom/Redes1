@@ -13,6 +13,7 @@ Este arquivo implementa as funcoes que manipulam raw sockets.
 
 #include "protocol.h"
 #include "commands.h"
+#include "utils.h"
  
 int cria_raw_socket (char * nome_interface_rede) {
     // Cria arquivo para o socket sem qualquer protocolo
@@ -58,12 +59,38 @@ int run_server() {
     while(1) {
 
         // Guarda mensagem recebida no buffer
-        int recebidos = recv(soquete, buffer, sizeof(buffer), 0);
+        int recebidos = recv(soquete, buffer, TAM_MAXIMO, 0);
 
         if (recebidos) {
-            
-        }
 
+            // Casting do buffer para protocolo
+            struct protocolo *pacote_recebido = (struct protocolo *) buffer;
+    
+            uint8_t sequencia = (pacote_recebido->seq_tipo >> 4) & 0x0F; 
+            uint8_t tipo = pacote_recebido->seq_tipo & 0x0F;
+
+            printf("End destino: %02X:%02X:%02X:%02X:%02X:%02X\n", 
+                pacote_recebido->end_destino[0], pacote_recebido->end_destino[1], pacote_recebido->end_destino[2], 
+                pacote_recebido->end_destino[3], pacote_recebido->end_destino[4], pacote_recebido->end_destino[5]);
+
+            printf("End origem:  %02X:%02X:%02X:%02X:%02X:%02X\n", 
+                pacote_recebido->end_origem[0], pacote_recebido->end_origem[1], pacote_recebido->end_origem[2], 
+                pacote_recebido->end_origem[3], pacote_recebido->end_origem[4], pacote_recebido->end_origem[5]);
+
+            printf("Tamanho: %d bytes\n",(pacote_recebido->tamanho));
+            
+            printf("Sequencia: %d\n", sequencia);
+            printf("Tipo: %d\n", tipo);
+            
+            printf("Dados: %s\n", pacote_recebido->dados_crc);
+
+            // Teste de paridade
+            if (calculo_paridade(pacote_recebido, recebidos) == 0) {
+                printf("Pacote sem erros (paridade compatível)\n");
+            } else {
+                printf("Pacote corrompido (paridade errada)\n");
+            }
+        }
     }
 
     return 0;
@@ -74,18 +101,19 @@ int run_client() {
     // Cria socket do cliente
     int soquete = cria_raw_socket("lo");
 
-    // Cria e zera um chunk
-    struct protocolo pacote;    
-    memset(&pacote, 0, sizeof(struct protocolo));
+    // Construcao da mensagem
+    uint8_t mac_dest[6] = MACSERVIDOR;
+    uint8_t mac_orig[6] = MACCLIENTE;
 
-    // Copia mensagem para parte de dados do chunk e guarda tamanho
-    strcpy((char *)pacote.dados, "Mensagem do pacote");
-    pacote.tamanho = strlen((char *)pacote.dados);
+    char * buffer = "mensagem construída pelo cliente";
+    int tam_texto = strlen(buffer);
+    int tam_envio = 19 + tam_texto;
+    if (tam_envio < 64) tam_envio = 64;
 
-    int total_enviar = TAM_MINIMO;
+    struct protocolo pacote = build_message(mac_dest, mac_orig, 0, 3, buffer, tam_texto);
 
-    // Manda pacote
-    send(soquete, &pacote, total_enviar, 0);
+    // Envio da mensagem
+    send(soquete, &pacote, tam_envio, 0);
     printf("Pacote enviado\n");
 
     char entrada[200];

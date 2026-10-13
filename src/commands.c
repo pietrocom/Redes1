@@ -23,7 +23,7 @@ void lls () {
     }
 }
 
-int cd (int soquete, char *path, uint8_t *MACDestino, uint8_t *MACOrigem) {
+/* int cd (int soquete, char *path, uint8_t *MACDestino, uint8_t *MACOrigem) {
 
     if (strlen(path) > 117) {
         printf("Tamanho do destino maior do que o permitido.\n");
@@ -32,4 +32,4 @@ int cd (int soquete, char *path, uint8_t *MACDestino, uint8_t *MACOrigem) {
 
     struct protocolo mensagem;
     build_message(MACDestino, MACOrigem, 0, 3, path, 0);
-}
+} */

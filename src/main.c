@@ -6,6 +6,9 @@ Autores: Camila Shibata (GRR) e Pietro Comin (20241955)
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/socket.h>
+#include <string.h>
+
+#include "raw_sockets.h"
 
 #define TAM_MAX_INPUT 150
 
@@ -21,13 +24,12 @@ int main (int argc, char * argv[]) {
         exit(1);
     }
 
-    int status = 1;
-    char input [TAM_MAX_INPUT];
-    while (status) {
-        printf("> ");
-        fgets(input, TAM_MAX_INPUT, stdin); printf("\n");
+    if (strcmp(argv[1], "cliente") == 0) {
 
-
+        run_client();
+    } else {
+        
+        run_server();
     }
     
     return 0;

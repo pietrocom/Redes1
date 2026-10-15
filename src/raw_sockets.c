@@ -9,6 +9,8 @@ Este arquivo implementa as funcoes que manipulam raw sockets.
 #include <net/if.h>             // Interface de rede <-> indice kernel
 #include <stdlib.h>
 #include <stdio.h>
+
+#include "protocol.h"
  
 int cria_raw_socket (char * nome_interface_rede) {
     // Cria arquivo para o socket sem qualquer protocolo
@@ -43,6 +45,19 @@ int cria_raw_socket (char * nome_interface_rede) {
     return soquete;
 }
 
-void receive () {
-    
+void receive (int port) {
+    int receiving = 1;
+
+    char * buffer = malloc(sizeof(MAX_MESSAGE_SIZE));
+    int tam_mensagem;
+
+    while (receiving) {
+        tam_mensagem = recv(port, buffer, MAX_MESSAGE_SIZE, 0);
+        if (tam_mensagem == -1) {
+            printf("Erro ao ler mensagem.\n");
+            receiving = 0;
+        }
+    }
+
+    free(buffer);
 }

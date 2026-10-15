@@ -25,16 +25,14 @@ int main (int argc, char * argv[]) {
     int port = cria_raw_socket("lo");
 
     int running = 1;
-    char input [TAM_MAX_INPUT] = {123456};
-    /*
+    char input [TAM_MAX_INPUT];
+
     while (running) {
         printf("> ");
         fgets(input, TAM_MAX_INPUT, stdin); printf("\n");
 
-        handle_input(&input);
+        handle_input(input);
     }
-    */
-    send(port, input, TAM_MAX_INPUT, 0); 
 
     return 0;
 }

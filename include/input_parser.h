@@ -10,8 +10,9 @@ Basicamente tem como tarefa processar o comando e seus argumentos.
 
 #define TAM_MAX_INPUT 150
 
-int handle_input (const char * input);
+int handle_input (const unsigned char * input);
 
-
+// Cria a mensagem referente ao "get"
+int create_get_message (const unsigned char * arg1);
 
 #endif

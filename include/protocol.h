@@ -6,7 +6,9 @@ que serao enviados.
 #ifndef PROTOCOL_H
 #define PROTOCOL_H
 
-struct protocolo {
+#define MAX_MESSAGE_SIZE 144
+
+struct protocolo_t {
     unsigned char preambulo [7];
     unsigned char marcador_inicio [1];
     unsigned char end_destino [6];

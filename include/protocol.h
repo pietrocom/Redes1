@@ -23,4 +23,6 @@ struct protocolo {
     uint8_t dados_crc [121];       // De 45B a 117B + 4B de CRC
 };
 
+struct protocolo build_message (uint8_t *endDestino, uint8_t *endOrigem, unsigned int sequencia, unsigned int tipo, void *dados, uint16_t tamanho_dados);
+
 #endif

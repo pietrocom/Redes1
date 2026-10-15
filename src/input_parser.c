@@ -70,6 +70,7 @@ int handle_input (const char * input) {
         break;
 
     case LLS:
+        printf("lls");
         break;
 
     case LCD:

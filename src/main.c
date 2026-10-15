@@ -9,6 +9,8 @@ Autores: Camila Shibata (GRR) e Pietro Comin (20241955)
 #include <string.h>
 
 #include "raw_sockets.h"
+#include "client.h"
+#include "server.h"
 
 #define TAM_MAX_INPUT 150
 

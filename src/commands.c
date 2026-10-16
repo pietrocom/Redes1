@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "protocol.h"
+#include "raw_sockets.h"
 
 void lcd (char *path) {
 
@@ -23,13 +24,12 @@ void lls () {
     }
 }
 
-/* int cd (int soquete, char *path, uint8_t *MACDestino, uint8_t *MACOrigem) {
+int cd (int soquete, char *path, uint8_t *mac_dest, uint8_t *mac_orig) {
 
     if (strlen(path) > 117) {
         printf("Tamanho do destino maior do que o permitido.\n");
         return -1;
     }
 
-    struct protocolo mensagem;
-    build_message(MACDestino, MACOrigem, 0, 3, path, 0);
-} */
+    send_message(soquete, mac_dest, mac_orig, 0, TIPO_CD, path, strlen(path));
+}

@@ -10,6 +10,7 @@ Este arquivo implementa as funcoes que manipulam raw sockets.
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/time.h>
 
 #include "protocol.h"
 #include "commands.h"
@@ -62,12 +63,20 @@ int send_message (int soquete, uint8_t *mac_dest, uint8_t *mac_orig, uint8_t seq
     // Envia pacote
     int enviados = send(soquete, &pacote, tam_envio, 0);
     
+    if (enviados == -1) {
+        printf("Erro ao enviar mensagem!\n");
+    }
+
     return enviados;
 }
 
 int receive_message (int soquete, uint8_t *meu_mac, struct protocolo *pacote_retorno) {
 
     unsigned char buffer[TAM_MAXIMO];
+
+    long long comeco = timestamp();
+    struct timeval timeout = { .tv_sec = TIMEOUT_MS/1000, .tv_usec = (TIMEOUT_MS%1000) * 1000 };
+    setsockopt(soquete, SOL_SOCKET, SO_RCVTIMEO, (char*) &timeout, sizeof(timeout));
 
     while(1) {
         // Recebe e guarda mensagem no buffer
@@ -90,5 +99,7 @@ int receive_message (int soquete, uint8_t *meu_mac, struct protocolo *pacote_ret
                 }
             }
         }
+
+        if (timestamp() - comeco > TIMEOUT_MS) return 0;
     }
 }

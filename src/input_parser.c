@@ -1,7 +1,10 @@
-#include "input_parser.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
+
+#include "input_parser.h"
+#include "commands.h"
 
 enum comando {
     GET,
@@ -13,7 +16,6 @@ enum comando {
     EXIT,
     INVALIDO
 };
-
 
 // --- Funcoes estaticas ---
 
@@ -38,7 +40,7 @@ static void split_input (char * input, char ** comando, char ** arg1) {
 
 // --- Funcoes da API ---
 
-int handle_input (const char * input) {
+int handle_input (const char * input, int soquete, uint8_t *mac_cliente, uint8_t *mac_servidor) {
     if (!input) {
         fprintf(stderr, "Erro ao acessar o input.\n");
         exit (1);
@@ -67,17 +69,24 @@ int handle_input (const char * input) {
         break;
 
     case CD:
+
+        cd(soquete, arg1, mac_servidor, mac_cliente);
         break;
 
     case LLS:
-        printf("lls");
+
+        lls();
         break;
 
     case LCD:
+
+        lcd(arg1);
         break;
 
     case EXIT:
-        break;
+
+        return -1;
     }
     
+    return 0;
 }

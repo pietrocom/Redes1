@@ -1,5 +1,6 @@
 #include <unistd.h>
 #include <string.h>
+#include <sys/time.h>
 
 #include "protocol.h"
 
@@ -35,4 +36,10 @@ int verifica_paridade (struct protocolo *mensagem, int tamanho) {
 
     if (paridade) return 0;
     else return 1;
+}
+
+long long timestamp() {
+    struct timeval tp;
+    gettimeofday(&tp, NULL);
+    return tp.tv_sec*1000 + tp.tv_usec/1000;
 }

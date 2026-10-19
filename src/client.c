@@ -1,37 +1,37 @@
-/* 
-Trabalho 1 de Redes de Computadores 2026/02. 
-Autores: Camila Shibata (GRR) e Pietro Comin (20241955)
-*/
-
-#include <stdlib.h>
 #include <stdio.h>
-#include <sys/socket.h>
+#include <stdint.h>
+#include <string.h>
 
-#include "input_parser.h"
+#include "protocol.h"
 #include "raw_sockets.h"
+#include "commands.h"
+#include "input_parser.h"
 
+int run_client() {
 
-// --- Variaveis Globais ---
+    // Cria socket do cliente
+    int soquete = cria_raw_socket("lo");
 
-int client_port;
+    // Construcao da mensagem
+    uint8_t mac_servidor[6] = MACSERVIDOR;
+    uint8_t mac_cliente[6] = MACCLIENTE;
 
+    char * buffer = "mensagem construída pelo cliente";
+    int enviados = send_message (soquete, mac_servidor, mac_cliente, 0, 3, buffer, strlen(buffer));
+    if (enviados) printf("Pacote enviado\n");
 
-/* 
-Entradas:
- - cliente
- - interface de rede
-*/
-int main (int argc, char * argv[]) {
-    int port = cria_raw_socket("lo");
+    char entrada[TAM_MAX_INPUT];
 
-    int running = 1;
-    char input [TAM_MAX_INPUT];
+    while(1) {
+        printf(">> ");
+        
+        // Lê comando no terminal
+        fgets(entrada, sizeof(entrada), stdin);
 
-    while (running) {
-        printf("> ");
-        fgets(input, TAM_MAX_INPUT, stdin); printf("\n");
+        int ans = handle_input(entrada, soquete, mac_cliente, mac_servidor);
 
-        handle_input(input);
+        if (ans == -1)
+            break;
     }
 
     return 0;

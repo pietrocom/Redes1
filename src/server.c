@@ -17,7 +17,7 @@ int run_server() {
         memset(&pacote_recebido, 0, sizeof(struct protocolo));
         int recebidos = receive_message(soquete, mac_dest, &pacote_recebido);
 
-        if (recebidos != -1) {
+        if (recebidos > 0) {
 
             printf("Pacote sem erros (paridade compatível)\n");
             uint8_t sequencia = (pacote_recebido.seq_tipo >> 4) & 0x0F; 

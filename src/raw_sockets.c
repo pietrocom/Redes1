@@ -56,8 +56,8 @@ int send_message (int soquete, uint8_t *mac_dest, uint8_t *mac_orig, uint8_t seq
 
     // Calcula tamanho do pacote
     int tam_envio = 19 + tamanho_dados;
-    if (tam_envio < 64) {
-        tam_envio = 64; // Regra do Ethernet
+    if (tam_envio < TAM_MINIMO) {
+        tam_envio = TAM_MINIMO;
     }
 
     // Envia pacote
@@ -73,10 +73,6 @@ int send_message (int soquete, uint8_t *mac_dest, uint8_t *mac_orig, uint8_t seq
 int receive_message (int soquete, uint8_t *meu_mac, struct protocolo *pacote_retorno) {
 
     unsigned char buffer[TAM_MAXIMO];
-
-    long long comeco = timestamp();
-    struct timeval timeout = { .tv_sec = TIMEOUT_MS/1000, .tv_usec = (TIMEOUT_MS%1000) * 1000 };
-    setsockopt(soquete, SOL_SOCKET, SO_RCVTIMEO, (char*) &timeout, sizeof(timeout));
 
     while(1) {
         // Recebe e guarda mensagem no buffer
@@ -99,7 +95,5 @@ int receive_message (int soquete, uint8_t *meu_mac, struct protocolo *pacote_ret
                 }
             }
         }
-
-        if (timestamp() - comeco > TIMEOUT_MS) return 0;
     }
 }

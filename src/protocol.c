@@ -26,7 +26,7 @@ struct protocolo build_message (uint8_t *endDestino, uint8_t *endOrigem, unsigne
     uint32_t paridade = calculo_paridade(&mensagem, 15 + tamanho_dados);
 
     int tamanho_total = 15 + tamanho_dados + 4;
-    if (tamanho_total < 64) tamanho_total = 64;
+    if (tamanho_total < TAM_MINIMO) tamanho_total = TAM_MINIMO;
 
     // Insere a paridade logo apos os dados
     uint32_t *posicao_crc = (uint32_t *) ((uint8_t *)&mensagem + (tamanho_total - 4));

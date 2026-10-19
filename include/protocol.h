@@ -11,9 +11,6 @@ que serao enviados.
 #define TAM_MINIMO 64
 #define TAM_MAXIMO 128
 
-#define TIMEOUT_MS 100
-#define TIMEOUT_MAX_TENTATIVAS 3
-
 #define MACSERVIDOR {0x60, 0xc7, 0x27, 0x2d, 0x52, 0x12}
 #define MACCLIENTE {0x60, 0xc7, 0x27, 0x2d, 0x52, 0x12}
 

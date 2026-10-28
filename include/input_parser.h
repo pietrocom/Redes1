@@ -10,6 +10,6 @@ Basicamente tem como tarefa processar o comando e seus argumentos.
 
 #define TAM_MAX_INPUT 150
 
-int handle_input (const char * input, int soquete, uint8_t *mac_cliente, uint8_t *mac_servidor);
+int handle_input (char * input, int soquete, uint8_t *mac_cliente, uint8_t *mac_servidor);
 
 #endif

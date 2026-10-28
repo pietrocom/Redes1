@@ -40,7 +40,7 @@ static void split_input (char * input, char ** comando, char ** arg1) {
 
 // --- Funcoes da API ---
 
-int handle_input (const char * input, int soquete, uint8_t *mac_cliente, uint8_t *mac_servidor) {
+int handle_input (char * input, int soquete, uint8_t *mac_cliente, uint8_t *mac_servidor) {
     if (!input) {
         fprintf(stderr, "Erro ao acessar o input.\n");
         exit (1);
@@ -69,12 +69,10 @@ int handle_input (const char * input, int soquete, uint8_t *mac_cliente, uint8_t
         break;
 
     case CD:
-
-        cd(soquete, arg1, mac_servidor, mac_cliente);
+        cd_cliente(soquete, arg1, mac_servidor, mac_cliente);
         break;
 
     case LLS:
-
         lls();
         break;
 

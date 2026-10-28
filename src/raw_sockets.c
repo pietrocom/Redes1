@@ -16,6 +16,7 @@ Este arquivo implementa as funcoes que manipulam raw sockets.
 #include "protocol.h"
 #include "commands.h"
 #include "utils.h"
+#include "raw_sockets.h"
  
 int cria_raw_socket (char * nome_interface_rede) {
     // Cria arquivo para o socket sem qualquer protocolo
@@ -46,6 +47,10 @@ int cria_raw_socket (char * nome_interface_rede) {
             "Verifique se a interface de rede foi especificada corretamente.\n");
         exit(-1);
     }
+
+    const int timeoutMillis = TIMEOUT;
+    struct timeval timeout = { .tv_sec = timeoutMillis / 1000, .tv_usec = (timeoutMillis % 1000) * 1000 };
+    setsockopt(soquete, SOL_SOCKET, SO_RCVTIMEO, (char*) &timeout, sizeof(timeout));
  
     return soquete;
 }
@@ -64,10 +69,6 @@ int send_message (int soquete, uint8_t *mac_dest, uint8_t *mac_orig, uint8_t seq
     // Envia pacote
     int enviados = send(soquete, &pacote, tam_envio, 0);
     
-    if (enviados == -1) {
-        printf("Erro ao enviar mensagem!\n");
-    }
-
     return enviados;
 }
 
@@ -92,9 +93,58 @@ int receive_message (int soquete, uint8_t *meu_mac, struct protocolo *pacote_ret
                     return recebidos;
                     
                 } else {
-                    return -1; 
+                    return 0; 
                 }
             }
+        } 
+        // Caso de timeout
+        else if (recebidos == -1) {
+            return -1;
         }
     }
+}
+
+int await_response (int soquete, uint8_t * meu_mac, struct protocolo * resposta) {
+
+    int status = receive_message(soquete, meu_mac, resposta);
+
+    // Timeout
+    if (status == -1) return RESP_TIMEOUT;
+    // Mensagem corrompida
+    if (status ==  0) return RESP_CORROMPIDA;
+
+    // Mascara 00001111
+    uint8_t tipo = resposta->seq_tipo & 0x0F;
+
+    if      (tipo == TIPO_ACK)  return RESP_ACK;
+    else if (tipo == TIPO_NACK) return RESP_NACK;
+    else                        return RESP_OUTRA;
+}
+
+int send_and_wait (int soquete, uint8_t * mac_dest, uint8_t * mac_orig, uint8_t seq,
+                   uint8_t tipo, void * dados, uint16_t n, struct protocolo * resposta) {
+
+    if (!resposta) {
+        struct protocolo local;
+        resposta = &local;
+    }
+
+    for (int envio = 1; envio <= TENT_MAX_ENVIOS; envio++) {
+        if (send_message(soquete, mac_dest, mac_orig, seq, tipo, dados, n) == -1) {
+            fprintf(stderr, "Erro ao enviar a mensagem.\n");
+            return -1;
+        }
+
+        enum resposta status = await_response(soquete, mac_orig, resposta);
+
+        switch (status) {
+        case RESP_ACK:          return 0;
+        case RESP_OUTRA:        return 1;
+        case RESP_NACK:         fprintf(stderr, "NACK, reenviando (%d/%d)\n", envio, TENT_MAX_ENVIOS); break;
+        case RESP_CORROMPIDA:   fprintf(stderr, "Resposta corrompida, reenviando (%d/%d)\n", envio, TENT_MAX_ENVIOS); break;
+        case RESP_TIMEOUT:      fprintf(stderr, "Timeout, reenviando (%d/%d)\n", envio, TENT_MAX_ENVIOS); break;
+        }
+    }
+
+    return -1;
 }

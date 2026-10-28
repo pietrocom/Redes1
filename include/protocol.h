@@ -11,21 +11,24 @@ que serao enviados.
 #define TAM_MINIMO 64
 #define TAM_MAXIMO 128
 
-#define MACSERVIDOR {0x60, 0xc7, 0x27, 0x2d, 0x52, 0x12}
-#define MACCLIENTE {0x60, 0xc7, 0x27, 0x2d, 0x52, 0x12}
+#define TIMEOUT 300     // Em milisegundos
 
-#define TIPO_ACK 0
-#define TIPO_NACK 1
-#define TIPO_ERRO 2
-#define TIPO_CD 3
-#define TIPO_LS 4
-#define TIPO_GET 5
-#define TIPO_PUT 6
-#define TIPO_OK 8
-#define TIPO_FIM 9
-#define TIPO_DADOS 13
-#define TIPO_TAMANHO 14
-#define TIPO_MOSTRAR 15
+#define MACSERVIDOR {0x02, 0x00, 0x00, 0x00, 0x00, 0x01}
+#define MACCLIENTE  {0x02, 0x00, 0x00, 0x00, 0x00, 0x02}
+
+#define TIPO_ACK     0x00
+#define TIPO_NACK    0x01
+#define TIPO_ERRO    0x02
+#define TIPO_CD      0x03
+#define TIPO_LS      0x04
+#define TIPO_GET     0x05
+#define TIPO_PUT     0x06
+#define TIPO_TEST    0x07
+#define TIPO_OK      0x08
+#define TIPO_FIM     0x09
+#define TIPO_DADOS   0x0d
+#define TIPO_TAMANHO 0x0e
+#define TIPO_MOSTRAR 0x0f
 
 struct protocolo {
     // O preambulo e o marcador de inicio sao adicionados pela propria interface de rede na camada fisica ao utilizarmos Raw Sockets (AF_PACKET) no Linux
@@ -37,5 +40,9 @@ struct protocolo {
 };
 
 struct protocolo build_message (uint8_t *endDestino, uint8_t *endOrigem, unsigned int sequencia, unsigned int tipo, void *dados, uint16_t tamanho_dados);
+
+void ack (int soquete, uint8_t * mac_dest, uint8_t * mac_orig);
+
+void nack (int soquete, uint8_t * mac_dest, uint8_t * mac_orig);
 
 #endif

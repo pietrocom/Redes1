@@ -4,6 +4,7 @@
 
 #include "protocol.h"
 #include "raw_sockets.h"
+#include "commands.h"
 
 int run_server() {
 
@@ -12,12 +13,15 @@ int run_server() {
 
     while(1) {
 
-        uint8_t mac_dest[6] = MACSERVIDOR;
+        uint8_t mac_dest[6]   = MACSERVIDOR;
+        uint8_t mac_client[6] = MACCLIENTE;
         struct protocolo pacote_recebido;
         memset(&pacote_recebido, 0, sizeof(struct protocolo));
         int recebidos = receive_message(soquete, mac_dest, &pacote_recebido);
 
+
         if (recebidos > 0) {
+            ack(soquete, mac_client, mac_dest);
 
             printf("Pacote sem erros (paridade compatível)\n");
             uint8_t sequencia = (pacote_recebido.seq_tipo >> 4) & 0x0F; 
@@ -37,9 +41,14 @@ int run_server() {
             printf("Tipo: %d\n", tipo);
             
             printf("Dados: %s\n", pacote_recebido.dados_crc);
-        } else {
+        } 
+        if (recebidos == 0) {
+            nack(soquete, mac_client, mac_dest);
             printf("ERRO! Paridade não é compatível\n");
+            continue;
         }
+        // Timeout
+        if (recebidos == -1) continue; 
     }
 
     return 0;

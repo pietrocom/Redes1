@@ -8,6 +8,6 @@ void lcd (char *path);
 void lls ();
 
 // cd (servidor)
-int cd (int soquete, char *path, uint8_t *mac_dest, uint8_t *mac_orig);
+int cd_cliente (int soquete, char *path, uint8_t *mac_dest, uint8_t *mac_orig);
 
 #endif

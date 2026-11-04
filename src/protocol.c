@@ -36,16 +36,12 @@ struct protocolo build_message (uint8_t *endDestino, uint8_t *endOrigem, unsigne
     return mensagem;
 }
 
-void ack (int soquete, uint8_t * mac_dest, uint8_t * mac_orig) {
+int ack (int soquete, uint8_t * mac_dest, uint8_t * mac_orig) {
 
-    send_message(soquete, mac_dest, mac_orig, 0, TIPO_ACK, NULL, 0);
-
-    return 0;
+    return send_message(soquete, mac_dest, mac_orig, 0, TIPO_ACK, NULL, 0);
 }
 
-void nack (int soquete, uint8_t * mac_dest, uint8_t * mac_orig) {
+int nack (int soquete, uint8_t * mac_dest, uint8_t * mac_orig) {
 
-    send_message(soquete, mac_dest, mac_orig, 0, TIPO_NACK, NULL, 0);
-
-    return 0;
+    return send_message(soquete, mac_dest, mac_orig, 0, TIPO_NACK, NULL, 0);
 }

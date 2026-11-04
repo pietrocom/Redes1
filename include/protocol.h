@@ -41,8 +41,10 @@ struct protocolo {
 
 struct protocolo build_message (uint8_t *endDestino, uint8_t *endOrigem, unsigned int sequencia, unsigned int tipo, void *dados, uint16_t tamanho_dados);
 
-void ack (int soquete, uint8_t * mac_dest, uint8_t * mac_orig);
+// Retorno: 0 em caso de sucesso; -1 c.c.
+int ack (int soquete, uint8_t * mac_dest, uint8_t * mac_orig);
 
-void nack (int soquete, uint8_t * mac_dest, uint8_t * mac_orig);
+// Retorno: 0 em caso de sucesso; -1 c.c.
+int nack (int soquete, uint8_t * mac_dest, uint8_t * mac_orig);
 
 #endif

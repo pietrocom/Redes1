@@ -18,6 +18,19 @@ Este arquivo implementa as funcoes que manipulam raw sockets.
 #include "utils.h"
 #include "raw_sockets.h"
  
+// --- Variaveis Globais ---
+
+static uint8_t seq_cliente = 0;
+
+
+
+// --- Funcoes da API ---
+
+uint8_t proxima_seq () { 
+    seq_cliente = (seq_cliente + 1) & 0x0F;     // Reinicia quando passa de 15
+    return seq_cliente; 
+}
+
 int cria_raw_socket (char * nome_interface_rede) {
     // Cria arquivo para o socket sem qualquer protocolo
     int soquete = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
@@ -124,10 +137,8 @@ int await_response (int soquete, uint8_t * meu_mac, struct protocolo * resposta)
 int send_and_wait (int soquete, uint8_t * mac_dest, uint8_t * mac_orig, uint8_t seq,
                    uint8_t tipo, void * dados, uint16_t n, struct protocolo * resposta) {
 
-    if (!resposta) {
-        struct protocolo local;
-        resposta = &local;
-    }
+    struct protocolo local;
+    if (!resposta) resposta = &local;
 
     for (int envio = 1; envio <= TENT_MAX_ENVIOS; envio++) {
         if (send_message(soquete, mac_dest, mac_orig, seq, tipo, dados, n) == -1) {
@@ -135,7 +146,35 @@ int send_and_wait (int soquete, uint8_t * mac_dest, uint8_t * mac_orig, uint8_t 
             return -1;
         }
 
-        enum resposta status = await_response(soquete, mac_orig, resposta);
+        enum resposta status;
+
+        while (1) {
+            status = await_response(soquete, mac_orig, resposta);
+
+            // Nesses casos, a sequencia nao pode ser analisada
+            // Sai do laco e reenvia 
+            if (status == RESP_NACK || status == RESP_CORROMPIDA || status == RESP_TIMEOUT) break;
+
+            // Acontece somente no servidor, quando esta esperando um ACK do OK
+            // Caso nao chegue um ACK mas um novo pedido de comando:
+            if (eh_pedido(resposta->seq_tipo & 0x0f)) {
+                // Se a sequencia for a mesma, o cliente nao recebeu o OK
+                // O servidor reenvia o OK sem fazer um CD a mais
+                if ( ((resposta->seq_tipo & 0xf0) >> 4) == seq )
+                    status = RESP_NACK;
+                // Se a sequencia for diferente, entao o cliente mandou outro comando,
+                // o que significa que recebeu o OK mas o ACK se perdeu
+                else
+                    status = RESP_ACK;
+                break;
+            }
+
+            // Eh a resposta correta deste envio, sendo um ACK ou OK/ERRO
+            if (((resposta->seq_tipo & 0xf0) >> 4) == seq) break;
+
+            // Caso a mensagem recebida nao atenda a nenhuma das condicoes, eh descartada
+            // Assim, volta a esperar uma resposta correta
+        }
 
         switch (status) {
         case RESP_ACK:          return 0;

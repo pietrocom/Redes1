@@ -17,12 +17,14 @@ int run_client() {
     uint8_t mac_servidor[6] = MACSERVIDOR;
     uint8_t mac_cliente[6]  = MACCLIENTE;
 
+    uint8_t seq = proxima_seq();
+
     // Mensagem inicial
     char * buffer = "mensagem construída pelo cliente";
-    int resposta = send_and_wait(soquete, mac_servidor, mac_cliente, 0, TIPO_TEST, buffer, strlen(buffer), NULL);
+    int resposta = send_and_wait(soquete, mac_servidor, mac_cliente, seq, TIPO_TEST, buffer, strlen(buffer), NULL);
 
     if (resposta == 0) printf("conexao inicial bem sucedida.\n");
-    else               {printf("conexao inicial mal sucedida.\n"); exit(1);}
+    else              {printf("conexao inicial mal sucedida.\n"); exit(1);}
 
     char entrada[TAM_MAX_INPUT];
 

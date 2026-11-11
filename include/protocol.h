@@ -41,8 +41,17 @@ struct protocolo {
 
 struct protocolo build_message (uint8_t *endDestino, uint8_t *endOrigem, unsigned int sequencia, unsigned int tipo, void *dados, uint16_t tamanho_dados);
 
+// Retorno: 1 caso o tipo seja CD, LS, GET, PUT ou TEST; 0 c.c.
+int eh_pedido (uint8_t tipo);
+
+// Retorna o tipo da mensagem
+uint8_t tipo (uint8_t seq_tipo);
+
+// Retorna a sequencia da mensagem
+uint8_t seq  (uint8_t seq_tipo);
+
 // Retorno: 0 em caso de sucesso; -1 c.c.
-int ack (int soquete, uint8_t * mac_dest, uint8_t * mac_orig);
+int ack (int soquete, uint8_t * mac_dest, uint8_t * mac_orig, uint8_t seq);
 
 // Retorno: 0 em caso de sucesso; -1 c.c.
 int nack (int soquete, uint8_t * mac_dest, uint8_t * mac_orig);

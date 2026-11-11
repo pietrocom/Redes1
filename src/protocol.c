@@ -26,6 +26,7 @@ struct protocolo build_message (uint8_t *endDestino, uint8_t *endOrigem, unsigne
     // Paridade
     uint32_t paridade = calculo_paridade(&mensagem, 15 + tamanho_dados);
 
+    // 15 = end_or + end_dest + tam + seq_tipo
     int tamanho_total = 15 + tamanho_dados + 4;
     if (tamanho_total < TAM_MINIMO) tamanho_total = TAM_MINIMO;
 
@@ -36,12 +37,25 @@ struct protocolo build_message (uint8_t *endDestino, uint8_t *endOrigem, unsigne
     return mensagem;
 }
 
-int ack (int soquete, uint8_t * mac_dest, uint8_t * mac_orig) {
+int eh_pedido (uint8_t tipo) {
+    return tipo == TIPO_CD  || tipo == TIPO_LS  || tipo == TIPO_GET ||
+           tipo == TIPO_PUT || tipo == TIPO_TEST;
+}
 
-    return send_message(soquete, mac_dest, mac_orig, 0, TIPO_ACK, NULL, 0);
+uint8_t tipo (uint8_t seq_tipo) {
+    return (seq_tipo & 0x0f);
+}
+
+uint8_t seq (uint8_t seq_tipo) {
+    return ((seq_tipo & 0xf0) >> 4);
+}
+
+int ack (int soquete, uint8_t * mac_dest, uint8_t * mac_orig, uint8_t seq) {
+
+    return send_message(soquete, mac_dest, mac_orig, seq, TIPO_ACK, NULL, 0);
 }
 
 int nack (int soquete, uint8_t * mac_dest, uint8_t * mac_orig) {
 
-    return send_message(soquete, mac_dest, mac_orig, 0, TIPO_NACK, NULL, 0);
+    return send_message(soquete, mac_dest, mac_orig, 0x00, TIPO_NACK, NULL, 0);
 }

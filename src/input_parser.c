@@ -63,9 +63,11 @@ int handle_input (char * input, int soquete, uint8_t *mac_cliente, uint8_t *mac_
         break;
 
     case PUT:
+        
         break;
 
     case LS:
+        ls_cliente(soquete, arg1, mac_servidor, mac_cliente);
         break;
 
     case CD:

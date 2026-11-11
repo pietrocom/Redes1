@@ -1,5 +1,5 @@
 /*
-Este arquivo implementa as funcoes que manipulam raw sockets.
+Este arquivo implementa as funcoes que manipulam raw sockets, envio e recebimento de mensagens.
 */
  
 #include <sys/socket.h>         // socket(), bind(), setsockopt(), AF_*, SOCK_*, SOL_PACKET
@@ -140,6 +140,7 @@ int send_and_wait (int soquete, uint8_t * mac_dest, uint8_t * mac_orig, uint8_t 
     struct protocolo local;
     if (!resposta) resposta = &local;
 
+    // Tentara enviar a mensagem ate TENT_MAX_ENVIOS vezes
     for (int envio = 1; envio <= TENT_MAX_ENVIOS; envio++) {
         if (send_message(soquete, mac_dest, mac_orig, seq, tipo, dados, n) == -1) {
             fprintf(stderr, "Erro ao enviar a mensagem.\n");
@@ -155,7 +156,7 @@ int send_and_wait (int soquete, uint8_t * mac_dest, uint8_t * mac_orig, uint8_t 
             // Sai do laco e reenvia 
             if (status == RESP_NACK || status == RESP_CORROMPIDA || status == RESP_TIMEOUT) break;
 
-            // Acontece somente no servidor, quando esta esperando um ACK do OK
+            // Acontece somente no servidor, quando esta esperando um ACK depois de enviar um OK
             // Caso nao chegue um ACK mas um novo pedido de comando:
             if (eh_pedido(resposta->seq_tipo & 0x0f)) {
                 // Se a sequencia for a mesma, o cliente nao recebeu o OK

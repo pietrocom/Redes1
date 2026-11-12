@@ -7,6 +7,73 @@
 #include "raw_sockets.h"
 #include "file_chuncker.h"
 
+
+// --- Funcoes Estaticas ---
+
+// Le de origem em blocos de ate 117 B, envia cada um com send_and_wait
+// usando o tipo dado, e no final envia FIM.
+static int envia_stream (int soquete, uint8_t * mac_dest, uint8_t * mac_orig, uint8_t tipo, FILE * file, int tamanho) {
+    struct protocolo resposta;
+    int status;
+    
+    // Calcula o piso de tamanho / CHUNCK_MAX_SIZE
+    int qtd_blocos = tamanho / CHUNCK_MAX_SIZE;
+
+    uint8_t chunk [CHUNCK_MAX_SIZE];
+    int seq;
+
+    // Envia os blocos inteiros do arquivo
+    for (int i = 0; i < qtd_blocos; i++) {
+        status = extrai_chunk(file, &chunk, CHUNCK_MAX_SIZE, i * CHUNCK_MAX_SIZE);
+        if (status == -1) {fprintf(stderr, "Erro ao extrair o chunck #%d.\n", i); return -1;}
+
+        seq = proxima_seq();
+
+        status = send_and_wait(soquete, mac_dest, mac_orig, seq, tipo, chunk, CHUNCK_MAX_SIZE, &resposta);
+
+        // Verifica se ocorreu algum erro
+        if (status == -1) {fprintf(stderr, "Erro ao enviar o chunck %d.\n", i); return -1;}
+        
+        // Caso o servidor tenha recebido corretamente, passa para o proximo chunck
+    }
+    // Envia o restante do arquivo
+    int pos   = qtd_blocos * CHUNCK_MAX_SIZE;
+    int resto = tamanho - pos;
+    if (resto > 0) {
+        extrai_chunk(file, &chunk, resto, pos);
+        seq = proxima_seq();
+        status = send_and_wait(soquete, mac_dest, mac_orig, seq, tipo, chunk, resto, &resposta);
+        if (status == -1) {fprintf(stderr, "Erro ao enviar o ultimo chunck"); return -1;}
+    }
+
+    // Envia uma mensagem dizendo que o envio do arquivo acabou
+    seq = proxima_seq();
+    status = send_and_wait(soquete, mac_dest, mac_orig, seq, TIPO_FIM, NULL, 0, &resposta);
+    if (status != 0) {fprintf(stderr, "Servidor nao respondeu a ultima mensagem enviada.\n"); return -1;}
+
+    return 0;
+}
+
+// Recebe blocos do tipo dado (com o controle de duplicatas acima),
+// escreve cada um em destino com fwrite e responde ACK, ate chegar o FIM.
+static int recebe_stream (int soquete, uint8_t * meu_mac, uint8_t * outro, uint8_t tipo, FILE * destino) {
+
+}
+
+// Recebe um caminho para um arquivo e retorna o nome do arquivo.
+static char * extrai_nome_base (char * path) {
+    // Returns a pointer to the last occurrence of character in the C string str.
+    // The terminating null-character is considered part of the C string. 
+    char * nome = strrchr(path, '/');
+    nome = nome ? nome + 1 : path;  // Se for um ponteiro valido, retorna o nome somente (sem o /), 
+                                    // senao retorna a caminho em si que ja eh o nome
+    return nome;
+}
+
+
+
+// --- Funcoes da API ---
+
 void lcd (char *path) {
 
     if (chdir(path) == 0) {
@@ -34,13 +101,13 @@ int cd_cliente (int soquete, char *path, uint8_t *mac_dest, uint8_t *mac_orig) {
         return -1;
     }
 
-    struct protocolo * resposta = malloc(sizeof(struct protocolo));
-    if (!resposta) {fprintf(stderr, "Erro ao alocar estrutura para resposta do CD.\n"); exit(1);}
+    struct protocolo resposta;
+    memset(&resposta, 0, sizeof(struct protocolo));
 
     uint8_t seq = proxima_seq();
 
     // Envia a mensagem do CD
-    int status = send_and_wait(soquete, mac_dest, mac_orig, seq, TIPO_CD, path, strlen(path), resposta);
+    int status = send_and_wait(soquete, mac_dest, mac_orig, seq, TIPO_CD, path, strlen(path), &resposta);
 
     if (status == -1) {
         fprintf(stderr, "Nao foi possivel realizar o comando cd.\n");
@@ -49,7 +116,7 @@ int cd_cliente (int soquete, char *path, uint8_t *mac_dest, uint8_t *mac_orig) {
 
     // Caso a resposta recebida do servidor nao tenha sido ACK nem NACK
     if (status == 1) {
-        uint8_t tipo = resposta->seq_tipo & 0x0f;
+        uint8_t tipo = resposta.seq_tipo & 0x0f;
         switch (tipo)
         {
         case TIPO_OK:
@@ -127,7 +194,7 @@ int ls_cliente (int soquete, char *path, uint8_t *mac_dest, uint8_t *mac_orig) {
         return -1;
     }
 
-
+    return 0;
 }
 
 int ls_servidor (struct protocolo * pacote_recebido, int soquete, uint8_t *mac_dest, uint8_t *mac_orig) {
@@ -139,37 +206,33 @@ int put_cliente (int soquete, char * path, uint8_t * mac_dest, uint8_t * mac_ori
     if (!file) {fprintf(stderr, "Erro ao abrir o arquivo %s. Arquivo inexistente!\n", path); return -1;}
 
     int tamanho = tamanho_do_arquivo(file);
+    if (tamanho == -1) {fprintf(stderr, "Erro ao ler tamanho do arquivo.\n"); fclose (file); return -1;}
+    uint32_t t  = tamanho;
 
     uint8_t seq = proxima_seq();
     struct protocolo resposta;
 
+    // === PRIMEIRA MENSAGEM (PUT) ===
     // A primeira mensagem vai contar ao servidor o tipo da mensagem 
-    int status = send_and_wait(soquete, mac_dest, mac_orig, seq, TIPO_PUT, NULL, 0, &resposta);
-    if (status != 0) {fprintf(stderr, "Erro na comunicacao inicial do PUT.\n"); return -1;}
+    char * nome = extrai_nome_base(path);
+    int status  = send_and_wait(soquete, mac_dest, mac_orig, seq, TIPO_PUT, nome, strlen(nome), &resposta);
+    if (status != 0) {fprintf(stderr, "Erro na comunicacao inicial do PUT.\n"); fclose (file); return -1;}
 
     seq = proxima_seq();
 
+    // === SEGUNDA MENSAGEM (TAMANHO) ===
     // A segunda mensagem contem o tamanho do arquivo a ser enviado
-    status = send_and_wait(soquete, mac_dest, mac_orig, seq, TIPO_TAMANHO, NULL, 0, &resposta);
-    if (status != 0) {fprintf(stderr, "Erro ao enviar ao servidor o tamanho do arquivo.\n"); return -1;}
+    status = send_and_wait(soquete, mac_dest, mac_orig, seq, TIPO_TAMANHO, &t, sizeof(t), &resposta);
+    if (status == -1) {fprintf(stderr, "Erro ao enviar ao servidor o tamanho do arquivo.\n"); fclose(file); return -1;}
+    if (status ==  1) {
+        uint8_t tipo = resposta.seq_tipo & 0x0f;
+        if (tipo == TIPO_ERRO)  {fprintf(stderr, "Erro: servidor nao aceitou o tamanho do arquivo sendo enviado.\n"); fclose(file); return -1;}
+        else                    {fprintf(stderr, "Erro: servidor retornou um tipo de mensagem inesperado.\n"); fclose(file); return -1;}
+    }
 
-    // Calcula o piso de tamanho / CHUNCK_MAX_SIZE
-    int qtd_blocos = tamanho / CHUNCK_MAX_SIZE;
+    // === SEQUENCIA DE MENSAGENS DE DADOS ===
+    status = envia_stream(soquete, mac_dest, mac_orig, TIPO_DADOS, file, tamanho);
 
-    char * chunk [CHUNCK_MAX_SIZE];
-    uint8_t tipo;
-
-    // Envia bloco a bloco, o arquivo
-    for (int i = 0; i++; i < qtd_blocos) {
-        extrai_chunk(file, chunk, CHUNCK_MAX_SIZE, i * CHUNCK_MAX_SIZE);
-
-        seq = proxima_seq();
-
-        memset(&resposta, "0", sizeof(struct protocolo));   // Zera o retorno da resposta para a proxima iteracao
-        status = send_and_wait(soquete, mac_dest, mac_orig, seq, TIPO_DADOS, chunk, CHUNCK_MAX_SIZE, &resposta);
-
-        // Verifica se ocorreu algum erro
-        if (status == -1) {fprintf(stderr, "Erro ao enviar o chunck %d.\n"); return -1;}
-        
-        // Caso o servidor tenha recebido corretamente, passa para o proximo chunck
+    fclose(file);
+    return status;
 }

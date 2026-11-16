@@ -26,13 +26,10 @@ struct protocolo build_message (uint8_t *endDestino, uint8_t *endOrigem, unsigne
     // Paridade
     uint32_t paridade = calculo_paridade(&mensagem, 15 + tamanho_dados);
 
-    // 15 = end_or + end_dest + tam + seq_tipo
-    int tamanho_total = 15 + tamanho_dados + 4;
-    if (tamanho_total < TAM_MINIMO) tamanho_total = TAM_MINIMO;
-
-    // Insere a paridade logo apos os dados
-    uint32_t *posicao_crc = (uint32_t *) ((uint8_t *)&mensagem + (tamanho_total - 4));
-    *posicao_crc = paridade;
+    // Insere a paridade logo apos os dados (byte 15 + tamanho_dados).
+    // 15 = end_dest (6) + end_orig (6) + tamanho (2) + seq_tipo (1)
+    // Usa memcpy para evitar problemas relacionados a alinhamnento. 
+    memcpy((uint8_t *)&mensagem + 15 + tamanho_dados, &paridade, 4);
 
     return mensagem;
 }

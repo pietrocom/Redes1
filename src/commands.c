@@ -106,7 +106,7 @@ int cd_cliente (int soquete, char *path, uint8_t *mac_dest, uint8_t *mac_orig) {
 
     uint8_t seq = proxima_seq();
 
-    // Envia a mensagem do CD
+    // === PRIMEIRA MENSAGEM (CD) ===
     int status = send_and_wait(soquete, mac_dest, mac_orig, seq, TIPO_CD, path, strlen(path), &resposta);
 
     if (status == -1) {

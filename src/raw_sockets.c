@@ -23,6 +23,86 @@ Este arquivo implementa as funcoes que manipulam raw sockets, envio e recebiment
 static uint8_t seq_cliente = 0;
 
 
+// --- Funcoes Estaticas ---
+
+// Confere a paridade de um pacote recebido. Valida o campo tamanho, copia
+// cabecalho + dados para pacote_retorno (com o restante zerado) e recalcula
+// a paridade sobre esses 15 + tamanho bytes, comparando com os 4 bytes que
+// vieram logo apos os dados.
+// Retorno: recebidos se a paridade confere; 0 se o pacote estiver corrompido.
+static int handle_parity (struct protocolo * pacote_recebido, struct protocolo * pacote_retorno, int recebidos, unsigned char * buffer) {
+    uint16_t n = pacote_recebido->tamanho;
+
+    // Tamanho impossivel ou maior do que o que chegou
+    if (n > 117 || 19 + n > recebidos) return 0;
+
+    // Copia so cabecalho + dados; o resto de pacote_retorno fica zerado,
+    // igual ao que o emissor tinha quando calculou a paridade
+    // Isso eh importante pois a comparacao deve ser feita com os bytes apos 
+    // os dados zerados, como valiam na hora de mandar a mensagem. 
+    memset(pacote_retorno, 0, sizeof(struct protocolo));
+    memcpy(pacote_retorno, buffer, 15 + n);
+
+    // Paridade que veio no pacote (4 bytes logo apos os dados)
+    uint32_t paridade_recebida;
+    memcpy(&paridade_recebida, buffer + 15 + n, 4);
+
+    // Recalcula sobre os mesmos 15 + n bytes e compara
+    if (calculo_paridade(pacote_retorno, 15 + n) != paridade_recebida) return 0;
+
+    return recebidos;
+}
+
+// Copia para quadro a nova mensagem com o preenchimento
+// Retorno: o novo tamanho.
+static int aplica_enchimento (struct protocolo * pacote, int tam_atual, uint8_t * quadro) {
+    uint8_t byte = 0x00;
+
+    // Comeca copiando os valores do cabecalho, que nao devem ser preenchidos com 0xff
+    memcpy(quadro, pacote, 12);
+
+    // Percorre toda a mensagem procurando por bytes 0x81 ou 0x88 e 
+    // adicionando 0xff apos os mesmos caso encontre
+    int novo_tamanho = 12;  // Comeca depois dos enderecos
+    for (int i = 12; i < tam_atual; i++) {
+        byte = ((uint8_t *)pacote)[i];
+        quadro[novo_tamanho] = byte;
+
+        if (byte == 0x81 || byte == 0x88) {
+            novo_tamanho++;
+            quadro[novo_tamanho] = 0xff;
+        }
+        
+        novo_tamanho++;
+    }
+
+    return novo_tamanho;
+}
+
+// Copia do pacote ao quadro todos os bytes, exceto os seguintes a um 0x81 ou 0x88.
+// Retorno: o tamanho da mensagem resultante (quadro); -1 se faltar o 0xff (pacote corrompido).
+static int remove_enchimento (uint8_t * pacote, int tam_atual, uint8_t * quadro) {
+    uint8_t byte;
+
+    // Enderecos vieram sem enchimento
+    memcpy(quadro, pacote, 12);
+
+    // Percorre a mesagem recebida copiando os bytes de pacote para quadro
+    // Quando encontra 0x81 ou 0x88 em pacote, pula o proximo byte
+    int tamanho_quadro = 12;
+    for (int i = 12; i < tam_atual; i++) {
+        byte = pacote[i];
+        quadro[tamanho_quadro] = byte;
+        if (byte == 0x81 || byte == 0x88) {
+            i++;
+            if (i >= tam_atual || pacote[i] != 0xff) return -1;
+        }
+        tamanho_quadro++;
+    }
+
+    return tamanho_quadro;
+}
+
 
 // --- Funcoes da API ---
 
@@ -73,41 +153,33 @@ int send_message (int soquete, uint8_t *mac_dest, uint8_t *mac_orig, uint8_t seq
     // Construcao do pacote
     struct protocolo pacote = build_message(mac_dest, mac_orig, sequencia, tipo, dados, tamanho_dados);
 
-    // Calcula tamanho do pacote
-    int tam_envio = 19 + tamanho_dados;
-    if (tam_envio < TAM_MINIMO) {
-        tam_envio = TAM_MINIMO;
-    }
+    // Realiza o preenchimento e calcula o tamanho do pacote
+    uint8_t quadro [2 * (19 + 117)]; 
+    memset(quadro, 0, sizeof(quadro));  // Todo o preenchimento ate 64 sai com zeros
+    int tam_envio = aplica_enchimento(&pacote, 19 + tamanho_dados, quadro);
+    if (tam_envio < TAM_MINIMO) tam_envio = TAM_MINIMO;
 
     // Envia pacote
-    int enviados = send(soquete, &pacote, tam_envio, 0);
+    int enviados = send(soquete, quadro, tam_envio, 0);
     
     return enviados;
 }
 
 int receive_message (int soquete, uint8_t *meu_mac, struct protocolo *pacote_retorno) {
 
-    unsigned char buffer[TAM_MAXIMO];
+    uint8_t buffer[2 * (19 + 117)];
+    uint8_t mensagem[sizeof(buffer)];
 
     while(1) {
         // Recebe e guarda mensagem no buffer
-        int recebidos = recv(soquete, buffer, TAM_MAXIMO, 0);
+        int recebidos = recv(soquete, buffer, sizeof(buffer), 0);
 
         if (recebidos > 0) {
-            struct protocolo *pacote_recebido = (struct protocolo *) buffer;
-
             // Verifica endereco de destino
-            if (memcmp(pacote_recebido->end_destino, meu_mac, 6) == 0) {
-                
-                // Verifica paridade
-                if (calculo_paridade(pacote_recebido, recebidos) == 0) {
-                    
-                    memcpy(pacote_retorno, pacote_recebido, 19 + pacote_recebido->tamanho);
-                    return recebidos;
-                    
-                } else {
-                    return 0; 
-                }
+            if (memcmp(buffer, meu_mac, 6) == 0) {
+                int tamanho = remove_enchimento(buffer, recebidos, mensagem);
+                if (tamanho == -1) return 0;               // enchimento invalido = corrompido
+                return handle_parity((struct protocolo *) mensagem, pacote_retorno, tamanho, mensagem);
             }
         } 
         // Caso de timeout

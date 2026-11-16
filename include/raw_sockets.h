@@ -26,7 +26,10 @@ int cria_raw_socket (char * nome_interface_rede);
 uint8_t proxima_seq ();
 
 // Constroi o pacote, calcula seu tamanho e o envia.
-// Retorno: 0 em caso de sucesso; -1 c.c.
+// Garante que todos os bytes 0x81 ou 0x88 sejam seguidos por outro byte 0xff. Evitando
+// o problema do VLAN. O correto funcionamento dessa funcionalidade depende do receive_message
+// remover esses bytes adicionais. 
+// Retorno: numero de bytes enviados; -1 c.c.
 int send_message (int soquete, uint8_t *mac_dest, uint8_t *mac_orig, uint8_t sequencia, uint8_t tipo, void *dados, uint16_t tamanho_dados);
 
 // Retorna o tamanho lido, 0 (corrompido) ou -1 (timeout).

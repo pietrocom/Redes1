@@ -63,6 +63,10 @@ int run_server() {
             case TIPO_TEST:
                 ack(soquete, mac_client, mac_servidor, sequencia);
                 break;
+
+            case TIPO_PUT:
+                put_servidor(&pacote_recebido, soquete, mac_client, mac_servidor);
+                break;
             
             default:
                 break;

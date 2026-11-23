@@ -99,11 +99,9 @@ static int recebe_nova (int soquete, uint8_t * meu_mac, uint8_t * outro,
 // destino) e por ultimo o FIM. Cada mensagem nova eh confirmada com ACK;
 // as repetidas sao confirmadas de novo e descartadas.
 // Retorno: 0 em caso de sucesso; -1 c.c.
-static int recebe_stream (int soquete, uint8_t * meu_mac, uint8_t * outro,
-                          uint8_t tipo, FILE * destino) {
+static int recebe_stream (int soquete, uint8_t * meu_mac, uint8_t * outro, uint8_t ultima_seq, uint8_t tipo, FILE * destino) {
 
-    struct protocolo resposta;
-    int ultima_seq = -1;    // Sequencia da ultima mensagem confirmada (nenhuma ainda)
+    struct protocolo resposta; 
 
     // === RECEBE MENSAGEM DE TAMANHO ===
     while (1) {
@@ -318,4 +316,30 @@ int put_cliente (int soquete, char * path, uint8_t * mac_dest, uint8_t * mac_ori
 
 int put_servidor (struct protocolo * pacote_recebido, int soquete, uint8_t *mac_dest, uint8_t *mac_orig) {
     
+    uint8_t  sequencia = seq(pacote_recebido->seq_tipo);
+    uint16_t tamanho   = pacote_recebido->tamanho;
+
+    if (tamanho == 0 || tamanho > CHUNCK_MAX_SIZE) {
+        fprintf(stderr, "Nome de arquivo invalido no PUT.\n");
+        send_message(soquete, mac_dest, mac_orig, sequencia, TIPO_ERRO, NULL, 0);
+        return -1;
+    }
+    char nome [CHUNCK_MAX_SIZE + 1];
+    memcpy(nome, pacote_recebido->dados_crc, tamanho);
+    nome[tamanho] = '\0';
+
+    FILE * file = fopen(nome, "wb");   // Cria ou substitui!
+    if (!file) {
+        fprintf(stderr, "Erro ao criar arquivo no servidor\n");
+        send_message(soquete, mac_dest, mac_orig, sequencia, TIPO_ERRO, NULL, 0);
+        return -1;
+    }
+
+    ack(soquete, mac_dest, mac_orig, sequencia);   // Confirma o PUT
+
+    // Recebe os blocos de dados e salva no arquivo
+    int status = recebe_stream(soquete, mac_orig, mac_dest, sequencia, TIPO_DADOS, file);
+    fclose(file);
+    if (status == -1) remove(nome);   // Caso haja qualquer erro, apaga o arquivo por completo
+    return status;
 }

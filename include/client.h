@@ -1,6 +1,6 @@
 #ifndef CLIENT
 #define CLIENT
 
-int run_client();
+int run_client(char * interface);
 
 #endif

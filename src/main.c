@@ -12,24 +12,28 @@ Autores: Camila Shibata (GRR) e Pietro Comin (20241955)
 #include "client.h"
 #include "server.h"
 
-/* 
+/*
 Entradas:
  - trabalho1
- - interface de rede
+ - papel: cliente ou servidor
+ - interface de rede (ex: enp3s0, lo)
 */
 int main (int argc, char * argv[]) {
     // Pega as entradas do programa
-    if (argc != 2) {
-        fprintf(stderr, "Entradas incorretas ao programa.\n Correto eh: sudo ./trabalho1 interface_de_rede\n");
+    if (argc != 3) {
+        fprintf(stderr, "Entradas incorretas ao programa.\n Correto eh: sudo ./trabalho1 <cliente|servidor> <interface_de_rede>\n");
         exit(1);
     }
 
-    if (strcmp(argv[1], "cliente") == 0) {
+    char * interface = argv[2];
 
-        run_client();
+    if (strcmp(argv[1], "cliente") == 0) {
+        run_client(interface);
+    } else if (strcmp(argv[1], "servidor") == 0) {
+        run_server(interface);
     } else {
-        
-        run_server();
+        fprintf(stderr, "Papel invalido: '%s'. Use 'cliente' ou 'servidor'.\n", argv[1]);
+        exit(1);
     }
     
     return 0;

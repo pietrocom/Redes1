@@ -8,10 +8,10 @@
 #include "commands.h"
 #include "input_parser.h"
 
-int run_client() {
+int run_client(char * interface) {
 
     // Cria socket do cliente
-    int soquete = cria_raw_socket("lo");
+    int soquete = cria_raw_socket(interface);
 
     // Construcao dos enderecos
     uint8_t mac_servidor[6] = MACSERVIDOR;

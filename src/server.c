@@ -33,10 +33,10 @@ static void debug_prints (struct protocolo pacote_recebido, uint8_t tipo, uint8_
 }
 
 
-int run_server() {
+int run_server(char * interface) {
 
     // Cria socket do servidor
-    int soquete = cria_raw_socket("lo");
+    int soquete = cria_raw_socket(interface);
 
     while(1) {
 

@@ -207,7 +207,7 @@ int cd_cliente (int soquete, char *path, uint8_t *mac_dest, uint8_t *mac_orig) {
     if (!file) { fprintf(stderr, "Erro ao criar arquivo temportario.\n"); return -1; }
 
     // Escreve o caminho no arquivo temporario para que seja compativel com envia_stream
-    fputs(file, path);
+    fputs(path, file);
     int tam = tamanho_do_arquivo(file);
     if (tam < 0 || (size_t) tam != strlen(path)) {
         fprintf(stderr, "Erro: tamanho do arquivo temporario nao bate com o do caminho.\n");
@@ -275,7 +275,7 @@ int ls_cliente (int soquete, char *path, uint8_t *mac_dest, uint8_t *mac_orig) {
     if (!file) { fprintf(stderr, "Erro ao criar arquivo temportario.\n"); return -1; }
 
     // Escreve o caminho no arquivo temporario para que seja compativel com envia_stream
-    fputs(file, path);
+    fputs(path, file);
     int tam = tamanho_do_arquivo(file);
     if (tam < 0 || (size_t) tam != strlen(path)) {
         fprintf(stderr, "Erro: tamanho do arquivo temporario nao bate com o do caminho.\n");
@@ -284,7 +284,7 @@ int ls_cliente (int soquete, char *path, uint8_t *mac_dest, uint8_t *mac_orig) {
     }
 
     status = envia_stream(soquete, mac_dest, mac_orig, file, strlen(path), TIPO_DADOS);
-    if (status == -1) { fprintf(stderr, "Erro ao enviar os dados durante ls.\n"); return -1; }
+    if (status == -1) { fprintf(stderr, "Erro ao enviar os dados durante ls.\n"); fclose(file); return -1; }
 
     fclose(file);   // Arquivo temporario apagado automaticamente
 
@@ -295,7 +295,9 @@ int ls_cliente (int soquete, char *path, uint8_t *mac_dest, uint8_t *mac_orig) {
 }
 
 int ls_servidor (struct protocolo * pacote_recebido, int soquete, uint8_t *mac_dest, uint8_t *mac_orig) {
-
+    (void) pacote_recebido; (void) soquete; (void) mac_dest; (void) mac_orig;
+    fprintf(stderr, "ls_servidor: nao implementado.\n");
+    return TIPO_ERRO;
 }
 
 int put_cliente (int soquete, char * path, uint8_t * mac_dest, uint8_t * mac_orig) {

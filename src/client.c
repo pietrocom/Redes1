@@ -26,7 +26,7 @@ int run_client() {
     if (resposta == 0) printf("conexao inicial bem sucedida.\n");
     else              {printf("conexao inicial mal sucedida.\n"); exit(1);}
 
-    char entrada[TAM_MAX_INPUT];
+    char entrada[TAM_MAX_INPUT];    // Modificavel em input parser
 
     while(1) {
         printf(">> ");

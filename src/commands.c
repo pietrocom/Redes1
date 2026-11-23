@@ -10,26 +10,34 @@
 
 // --- Funcoes Estaticas ---
 
-// Le de origem em blocos de ate 117 B, envia cada um com send_and_wait
-// usando o tipo dado, e no final envia FIM.
-static int envia_stream (int soquete, uint8_t * mac_dest, uint8_t * mac_orig, uint8_t tipo, FILE * file, int tamanho) {
+// Envia o arquivo inteiro: primeiro o TAMANHO, depois os DADOS em blocos de ate
+// CHUNCK_MAX_SIZE bytes e por ultimo o FIM. Cada mensagem espera resposta (send_and_wait).
+// Retorno: 0 em caso de sucesso; -1 c.c. (inclusive se o receptor recusar o tamanho).
+static int envia_stream (int soquete, uint8_t * mac_dest, uint8_t * mac_orig, FILE * file, int tamanho, uint8_t tipo) {
     struct protocolo resposta;
     int status;
-    
+
+    // === MENSAGEM DE TAMANHO ===
+    uint32_t t = tamanho;
+    status = send_and_wait(soquete, mac_dest, mac_orig, proxima_seq(), TIPO_TAMANHO, &t, sizeof(t), &resposta);
+    if (status == -1) {fprintf(stderr, "Erro ao enviar o tamanho do arquivo.\n"); return -1;}
+    if (status ==  1) {
+        if ((resposta.seq_tipo & 0x0f) == TIPO_ERRO) fprintf(stderr, "Receptor nao aceitou o tamanho do arquivo.\n");
+        else                                         fprintf(stderr, "Resposta inesperada ao tamanho do arquivo.\n");
+        return -1;
+    }
+
+    // === MENSAGENS DE DADOS ===
     // Calcula o piso de tamanho / CHUNCK_MAX_SIZE
     int qtd_blocos = tamanho / CHUNCK_MAX_SIZE;
-
     uint8_t chunk [CHUNCK_MAX_SIZE];
-    int seq;
 
     // Envia os blocos inteiros do arquivo
     for (int i = 0; i < qtd_blocos; i++) {
         status = extrai_chunk(file, &chunk, CHUNCK_MAX_SIZE, i * CHUNCK_MAX_SIZE);
         if (status == -1) {fprintf(stderr, "Erro ao extrair o chunck #%d.\n", i); return -1;}
 
-        seq = proxima_seq();
-
-        status = send_and_wait(soquete, mac_dest, mac_orig, seq, tipo, chunk, CHUNCK_MAX_SIZE, &resposta);
+        status = send_and_wait(soquete, mac_dest, mac_orig, proxima_seq(), tipo, chunk, CHUNCK_MAX_SIZE, &resposta);
 
         // Verifica se ocorreu algum erro
         if (status == -1) {fprintf(stderr, "Erro ao enviar o chunck %d.\n", i); return -1;}
@@ -41,23 +49,115 @@ static int envia_stream (int soquete, uint8_t * mac_dest, uint8_t * mac_orig, ui
     int resto = tamanho - pos;
     if (resto > 0) {
         extrai_chunk(file, &chunk, resto, pos);
-        seq = proxima_seq();
-        status = send_and_wait(soquete, mac_dest, mac_orig, seq, tipo, chunk, resto, &resposta);
+        status = send_and_wait(soquete, mac_dest, mac_orig, proxima_seq(), tipo, chunk, resto, &resposta);
         if (status == -1) {fprintf(stderr, "Erro ao enviar o ultimo chunck"); return -1;}
     }
 
-    // Envia uma mensagem dizendo que o envio do arquivo acabou
-    seq = proxima_seq();
-    status = send_and_wait(soquete, mac_dest, mac_orig, seq, TIPO_FIM, NULL, 0, &resposta);
+    // === MENSAGEM DE FIM ===
+    status = send_and_wait(soquete, mac_dest, mac_orig, proxima_seq(), TIPO_FIM, NULL, 0, &resposta);
     if (status != 0) {fprintf(stderr, "Servidor nao respondeu a ultima mensagem enviada.\n"); return -1;}
 
     return 0;
 }
 
-// Recebe blocos do tipo dado (com o controle de duplicatas acima),
-// escreve cada um em destino com fwrite e responde ACK, ate chegar o FIM.
-static int recebe_stream (int soquete, uint8_t * meu_mac, uint8_t * outro, uint8_t tipo, FILE * destino) {
+// Espera a proxima mensagem NOVA, resolvendo sozinha os casos em que nao ha nada
+// a processar:
+//   - timeout:    tenta de novo, ate TENT_MAX_ENVIOS timeouts;
+//   - corrompida: envia NACK para o emissor reenviar;
+//   - repetida (mesma sequencia de ultima_seq): o emissor nao recebeu o nosso ACK,
+//     entao o ACK eh reenviado e a mensagem eh descartada, evitando processamento duplo.
+// ultima_seq: sequencia da ultima mensagem ja confirmada (-1 se nenhuma).
+// Retorno: 0 com a mensagem nova em msg; -1 se estourar os timeouts.
+static int recebe_nova (int soquete, uint8_t * meu_mac, uint8_t * outro,
+                        int ultima_seq, struct protocolo * msg) {
+    int status;
+    int timeouts = 0;
+    while (1) {
+        status = receive_message(soquete, meu_mac, msg);
+        // Caso tenha dado timeout
+        if (status == -1) {
+            fprintf(stderr, "Recepcao deu timeout, tentando novamente %d/%d.\n", ++timeouts, TENT_MAX_ENVIOS);
+            if (timeouts == TENT_MAX_ENVIOS) return -1;
+            continue;
+        }
+        // Caso chegue corrompida, pede o reenvio
+        if (status == 0)  {
+            fprintf(stderr, "Mensagem corrompida.\n");
+            nack(soquete, outro, meu_mac);
+            continue;
+        }
+        // Caso seja repetida, reenvia o ACK que se perdeu e descarta a mensagem
+        if (seq(msg->seq_tipo) == ultima_seq) {
+            ack(soquete, outro, meu_mac, ultima_seq);
+            continue;
+        }
+        return 0;
+    }
+}
 
+// Recebe um stream: primeiro o TAMANHO, depois os blocos do tipo dado (gravados em
+// destino) e por ultimo o FIM. Cada mensagem nova eh confirmada com ACK;
+// as repetidas sao confirmadas de novo e descartadas.
+// Retorno: 0 em caso de sucesso; -1 c.c.
+static int recebe_stream (int soquete, uint8_t * meu_mac, uint8_t * outro,
+                          uint8_t tipo, FILE * destino) {
+
+    struct protocolo resposta;
+    int ultima_seq = -1;    // Sequencia da ultima mensagem confirmada (nenhuma ainda)
+
+    // === RECEBE MENSAGEM DE TAMANHO ===
+    while (1) {
+        if (recebe_nova(soquete, meu_mac, outro, ultima_seq, &resposta) == -1) return -1;
+        if ((resposta.seq_tipo & 0x0f) == TIPO_TAMANHO && resposta.tamanho == sizeof(uint32_t)) break;
+        printf("Warning: mensagem recebida nao eh do tipo tamanho, aguardando mensagem do tipo correto...\n");
+    }
+
+    uint32_t tamanho;
+    memcpy(&tamanho, resposta.dados_crc, sizeof(tamanho));  // Pega exatamente o tamanho mandado
+    ultima_seq = seq(resposta.seq_tipo);
+    ack(soquete, outro, meu_mac, ultima_seq);
+
+    // === RECEBE MENSAGENS DE DADOS ===
+    uint32_t qtd_blocos = (tamanho % CHUNCK_MAX_SIZE != 0)
+                        ? tamanho / CHUNCK_MAX_SIZE + 1 : tamanho / CHUNCK_MAX_SIZE;  // Teto
+    for (uint32_t i = 0; i < qtd_blocos; i++) {
+        while (1) {
+            if (recebe_nova(soquete, meu_mac, outro, ultima_seq, &resposta) == -1) return -1;
+            if ((resposta.seq_tipo & 0x0f) == tipo) break;
+            printf("Warning: mensagem recebida nao eh do tipo de dados esperado, aguardando mensagem do tipo correto...\n");
+        }
+        // Escreve o bloco recebido no arquivo 
+        if (fwrite(resposta.dados_crc, 1, resposta.tamanho, destino) != resposta.tamanho) {
+            fprintf(stderr, "Erro ao escrever no arquivo indicado: tamanho escrito nao bate com o tamanho dos dados da mensagem.\n");
+            return -1;
+        }
+        // So confirma depois de escrever
+        ultima_seq = seq(resposta.seq_tipo);
+        ack(soquete, outro, meu_mac, ultima_seq);
+    }
+
+    // === RECEBE MENSAGEM DE FIM ===
+    while (1) {
+        if (recebe_nova(soquete, meu_mac, outro, ultima_seq, &resposta) == -1) return -1;
+        if ((resposta.seq_tipo & 0x0f) == TIPO_FIM) break;
+        printf("Warning: mensagem recebida nao eh do tipo fim, aguardando mensagem do tipo correto...\n");
+    }
+    ultima_seq = seq(resposta.seq_tipo);
+    ack(soquete, outro, meu_mac, ultima_seq);
+
+    // Se o ACK do FIM se perder, o emissor reenvia o FIM, mas ninguem estaria ouvindo.
+    // Por isso continua ouvindo, confirmando de novo cada FIM repetido, ate passarem
+    // 2 timeouts seguidos sem nada chegar. 
+    int status;
+    int silencios = 0;
+    while (silencios < 2) {
+        status = receive_message(soquete, meu_mac, &resposta);
+        if (status == -1) { silencios++; continue; }
+        silencios = 0;
+        if (status > 0 && seq(resposta.seq_tipo) == ultima_seq) ack(soquete, outro, meu_mac, ultima_seq);
+    }
+
+    return 0;
 }
 
 // Recebe um caminho para um arquivo e retorna o nome do arquivo.
@@ -92,14 +192,7 @@ void lls () {
     }
 }
 
-// Ao realizar o CD, o cliente espera que o servidor responda com um OK 
-// caso bem sucedido.
 int cd_cliente (int soquete, char *path, uint8_t *mac_dest, uint8_t *mac_orig) {
-
-    if (strlen(path) > 117) {
-        printf("Tamanho do destino maior do que o permitido.\n");
-        return -1;
-    }
 
     struct protocolo resposta;
     memset(&resposta, 0, sizeof(struct protocolo));
@@ -107,36 +200,22 @@ int cd_cliente (int soquete, char *path, uint8_t *mac_dest, uint8_t *mac_orig) {
     uint8_t seq = proxima_seq();
 
     // === PRIMEIRA MENSAGEM (CD) ===
-    int status = send_and_wait(soquete, mac_dest, mac_orig, seq, TIPO_CD, path, strlen(path), &resposta);
+    int status = send_and_wait(soquete, mac_dest, mac_orig, seq, TIPO_CD, NULL, 0, &resposta);
 
-    if (status == -1) {
-        fprintf(stderr, "Nao foi possivel realizar o comando cd.\n");
-        return -1;
-    }
+    if (status == -1) { fprintf(stderr, "Nao foi possivel realizar o comando cd.\n"); return -1; }
 
-    // Caso a resposta recebida do servidor nao tenha sido ACK nem NACK
-    if (status == 1) {
-        uint8_t tipo = resposta.seq_tipo & 0x0f;
-        switch (tipo)
-        {
-        case TIPO_OK:
-            // Tipo OK requer timeout, por isso cliente responde que recebeu
-            send_message(soquete, mac_dest, mac_orig, seq, TIPO_ACK, NULL, 0);
-            return 0;
-        
-        case TIPO_ERRO:
-            fprintf(stderr, "Servidor nao mudou de diretorio, diretorio inexistente.\n");
-            return -1;
-        
-        default:
-            fprintf(stderr, "Resposta inesperada do tipo %d.\n", tipo);
-            return -1;
-        }
-    }
+    // === MENSAGENS DO CAMINHO (DADOS) ===
+    FILE * file = tmpfile();
+    if (!file) { fprintf(stderr, "Erro ao criar arquivo temportario.\n"); return -1; }
 
-    // Perceba que o caso do ACK ter sido recebido nao eh tratado pois se espera OK apos um CD
+    // Escreve o caminho no arquivo temporario para que seja compativel com envia_stream
+    fprintf(file, path);
+    if (strlen(path) != tamanho_do_arquivo(file)) { fprintf(stderr, "Erro: tamanho do arquivo temporario nao bate com o do caminho.\n"); return -1; }
 
-    return 0;
+    status = envia_stream(soquete, mac_dest, mac_orig, file, strlen(path), TIPO_DADOS);
+
+    fclose(file);   // Arquivo temporario apagado automaticamente
+    return status;
 }
 
 int cd_servidor (struct protocolo * pacote_recebido, int soquete, uint8_t *mac_dest, uint8_t *mac_orig) {
@@ -178,23 +257,33 @@ int cd_servidor (struct protocolo * pacote_recebido, int soquete, uint8_t *mac_d
 
 int ls_cliente (int soquete, char *path, uint8_t *mac_dest, uint8_t *mac_orig) {
     
-    if (strlen(path) > 117) {
-        printf("Tamanho do destino maior do que o permitido.\n");
-        return -1;
-    }
-
     struct protocolo resposta;
+    memset(&resposta, 0, sizeof(struct protocolo));
+
     uint8_t seq = proxima_seq();
 
-    // Envia a mensagem de LS
-    int status = send_and_wait(soquete, mac_dest, mac_orig, seq, TIPO_LS, path, strlen(path), &resposta);
+    // === PRIMEIRA MENSAGEM (LS) ===
+    int status = send_and_wait(soquete, mac_dest, mac_orig, seq, TIPO_LS, NULL, 0, &resposta);
 
-    if (status == -1) {
-        fprintf(stderr, "Nao foi possivel realizar o comando ls.\n");
-        return -1;
-    }
+    if (status == -1) { fprintf(stderr, "Nao foi possivel realizar o comando ls.\n"); return -1; }
 
-    return 0;
+    // === MENSAGENS DO CAMINHO (DADOS) ===
+    FILE * file = tmpfile();
+    if (!file) { fprintf(stderr, "Erro ao criar arquivo temportario.\n"); return -1; }
+
+    // Escreve o caminho no arquivo temporario para que seja compativel com envia_stream
+    fprintf(file, path);
+    if (strlen(path) != tamanho_do_arquivo(file)) { fprintf(stderr, "Erro: tamanho do arquivo temporario nao bate com o do caminho.\n"); return -1; }
+
+    status = envia_stream(soquete, mac_dest, mac_orig, file, strlen(path), TIPO_DADOS);
+    if (status == -1) { fprintf(stderr, "Erro ao enviar os dados durante ls.\n"); return -1; }
+
+    fclose(file);   // Arquivo temporario apagado automaticamente
+
+    // === RECEBE A RESPOSTA ===
+
+
+    return status;
 }
 
 int ls_servidor (struct protocolo * pacote_recebido, int soquete, uint8_t *mac_dest, uint8_t *mac_orig) {
@@ -220,19 +309,13 @@ int put_cliente (int soquete, char * path, uint8_t * mac_dest, uint8_t * mac_ori
 
     seq = proxima_seq();
 
-    // === SEGUNDA MENSAGEM (TAMANHO) ===
-    // A segunda mensagem contem o tamanho do arquivo a ser enviado
-    status = send_and_wait(soquete, mac_dest, mac_orig, seq, TIPO_TAMANHO, &t, sizeof(t), &resposta);
-    if (status == -1) {fprintf(stderr, "Erro ao enviar ao servidor o tamanho do arquivo.\n"); fclose(file); return -1;}
-    if (status ==  1) {
-        uint8_t tipo = resposta.seq_tipo & 0x0f;
-        if (tipo == TIPO_ERRO)  {fprintf(stderr, "Erro: servidor nao aceitou o tamanho do arquivo sendo enviado.\n"); fclose(file); return -1;}
-        else                    {fprintf(stderr, "Erro: servidor retornou um tipo de mensagem inesperado.\n"); fclose(file); return -1;}
-    }
-
-    // === SEQUENCIA DE MENSAGENS DE DADOS ===
-    status = envia_stream(soquete, mac_dest, mac_orig, TIPO_DADOS, file, tamanho);
+    // === SEQUENCIA DE MENSAGENS ===
+    status = envia_stream(soquete, mac_dest, mac_orig, file, tamanho, TIPO_DADOS);
 
     fclose(file);
     return status;
+}
+
+int put_servidor (struct protocolo * pacote_recebido, int soquete, uint8_t *mac_dest, uint8_t *mac_orig) {
+    
 }

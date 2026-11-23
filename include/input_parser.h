@@ -8,7 +8,7 @@ Basicamente tem como tarefa processar o comando e seus argumentos.
 #ifndef INPUT_PARSER
 #define INPUT_PARSER
 
-#define TAM_MAX_INPUT 150
+#define TAM_MAX_INPUT 500
 
 int handle_input (char * input, int soquete, uint8_t *mac_cliente, uint8_t *mac_servidor);
 

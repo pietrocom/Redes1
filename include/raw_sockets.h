@@ -33,6 +33,7 @@ uint8_t proxima_seq ();
 int send_message (int soquete, uint8_t *mac_dest, uint8_t *mac_orig, uint8_t sequencia, uint8_t tipo, void *dados, uint16_t tamanho_dados);
 
 // Retorna o tamanho lido, 0 (corrompido) ou -1 (timeout).
+// Trata da remocao do enchimento.
 int receive_message (int soquete, uint8_t *meu_mac, struct protocolo *pacote_retorno);
 
 // Aguarda alguma resposta ou da timeout.

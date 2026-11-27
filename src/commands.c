@@ -263,27 +263,34 @@ int ls_cliente (int soquete, int argc, char **argv, uint8_t *mac_dest, uint8_t *
     struct protocolo resposta;
     memset(&resposta, 0, sizeof(struct protocolo));
 
+    // === MENSAGEM LS COM FLAGS ===
+
     uint8_t seq = proxima_seq();
 
     uint8_t flags = 0;
     for (int i = 1; i < argc; i++) {
+
         if (strcmp(argv[i], "-a") == 0)
-            flags |= (1 << 0); // flag -a: 000 001
+            flags |= (1 << 0);          // flag -a: 000 001 (|: OU bitwise)
         else if  (strcmp(argv[i], "-l") == 0)
-            flags |= (1 << 1); // flag -l: 000 010
+            flags |= (1 << 1);          // flag -l: 000 010
     }
 
-    // === MENSAGEM LS COM FLAGS ===
     int status;
     if (flags > 0)
         status = send_and_wait(soquete, mac_dest, mac_orig, seq, TIPO_LS, &flags, 1, &resposta);
     else
         status = send_and_wait(soquete, mac_dest, mac_orig, seq, TIPO_LS, NULL, 0, &resposta);
     
-    int
+    if (status != 0) {
+        fprintf(stderr, "Erro ao enviar comando ls para o servidor.\n");
+        return TIPO_ERRO;
+    }
 
     // === RECEBE A RESPOSTA ===
 
+    status = recebe_stream(soquete, mac_orig, mac_dest, seq, TIPO_MOSTRAR, stdout);
+    fflush(stdout);
 
     return status;
 }
@@ -294,27 +301,48 @@ int ls_servidor (struct protocolo * pacote_recebido, int soquete, uint8_t *mac_d
     uint8_t  sequencia = seq(pacote_recebido->seq_tipo);
     uint8_t flags = *pacote_recebido->dados_crc;
 
-    ack(soquete, mac_dest, mac_orig, sequencia);
-
+    // Decodifica as flags
     int a = (flags & (1 << 0)) != 0;
     int f = (flags & (1 << 1)) != 0;
 
+    // Comando a ser executado no servidor
     char cmd[16] = "ls";
     if (a) strcat(cmd, " -a");
     if (f) strcat(cmd, " -l");
+    else   strcat(cmd, " -C");  // Forca formatacao em colunas
 
-    FILE *fp = popen(cmd, "r"); // Executa o comando
+    // Executa o comando e captura a saida dele
+    FILE *fp = popen(cmd, "r");
     if (!fp) {
-        perror("Erro ao guardar resultado do ls");
-        return TIPO_ERRO;
+        fprintf(stderr, "Erro ao executar comando ls no servidor.\n");
+        send_message(soquete, mac_dest, mac_orig, sequencia, TIPO_ERRO, NULL, 0);
+        return -1;
     }
 
+    FILE *tmp = tmpfile();  // Arquivo temporario para armazenas saida do comando
+    if (!tmp) {
+        perror("Erro ao criar arquivo temporario para ls");
+        pclose(fp);
+        send_message(soquete, mac_dest, mac_orig, sequencia, TIPO_ERRO, NULL, 0);
+        return -1;
+    }
+
+    // Copia a saida do comando para o arquivo temporario
     char buffer[CHUNCK_MAX_SIZE];
     size_t lidos;
-
-    while ((lidos = fred(buffer, 1, sizeof(buffer), fp)) > 0) {
-        
+    while ((lidos = fread(buffer, 1, sizeof(buffer), fp)) > 0) {
+        fwrite(buffer, 1, lidos, tmp);
     }
+    pclose(fp);
+
+    int tamanho = tamanho_do_arquivo(tmp);
+
+    ack(soquete, mac_dest, mac_orig, sequencia);
+
+    int status = envia_stream(soquete, mac_dest, mac_orig, tmp, tamanho, TIPO_MOSTRAR);
+
+    fclose(tmp);
+    return status;
 }
 
 int put_cliente (int soquete, char * path, uint8_t * mac_dest, uint8_t * mac_orig) {

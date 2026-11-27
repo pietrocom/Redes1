@@ -192,70 +192,61 @@ void lls () {
 
 int cd_cliente (int soquete, char *path, uint8_t *mac_dest, uint8_t *mac_orig) {
 
+    // Retorna erro caso o caminho seja maior que a mensagem
+    if (strlen(path) > CHUNCK_MAX_SIZE) {
+        fprintf(stderr, "Erro: caminho maior que o suportado\n");
+        return -1;
+    }
+
     struct protocolo resposta;
     memset(&resposta, 0, sizeof(struct protocolo));
 
     uint8_t seq = proxima_seq();
 
-    // === PRIMEIRA MENSAGEM (CD) ===
-    int status = send_and_wait(soquete, mac_dest, mac_orig, seq, TIPO_CD, NULL, 0, &resposta);
+    // === MENSAGEM CD COM CAMINHO ===
+    int status = send_and_wait(soquete, mac_dest, mac_orig, seq, TIPO_CD, path, strlen(path), &resposta);
 
     if (status == -1) { fprintf(stderr, "Nao foi possivel realizar o comando cd.\n"); return -1; }
 
-    // === MENSAGENS DO CAMINHO (DADOS) ===
-    FILE * file = tmpfile();
-    if (!file) { fprintf(stderr, "Erro ao criar arquivo temportario.\n"); return -1; }
-
-    // Escreve o caminho no arquivo temporario para que seja compativel com envia_stream
-    fputs(path, file);
-    int tam = tamanho_do_arquivo(file);
-    if (tam < 0 || (size_t) tam != strlen(path)) {
-        fprintf(stderr, "Erro: tamanho do arquivo temporario nao bate com o do caminho.\n");
-        fclose(file);
+    if (status == 1) {
+        if ((resposta.seq_tipo & 0x0f) == TIPO_ERRO)
+            fprintf(stderr, "Erro: diretorio invalido ou sem permissao no servidor.\n");
+        else
+            fprintf(stderr, "Resposta inesperada ao comando cd.\n");
         return -1;
     }
 
-    status = envia_stream(soquete, mac_dest, mac_orig, file, strlen(path), TIPO_DADOS);
-
-    fclose(file);   // Arquivo temporario apagado automaticamente
     return status;
 }
 
 int cd_servidor (struct protocolo * pacote_recebido, int soquete, uint8_t *mac_dest, uint8_t *mac_orig) {
     if (!pacote_recebido) {fprintf(stderr, "Erro ao processar pacote recebido: ponteiro invalido."); exit(1);}
 
-    // Calcula e instancia o caminho
-    uint16_t tamanho = pacote_recebido->tamanho;
-    char caminho [118];     // 117 + \0
-    if (tamanho > 117) {printf("Tamanho maior que o esperado.\n"); tamanho = 117;}
+    uint8_t  sequencia = seq(pacote_recebido->seq_tipo);
+    uint16_t tamanho   = pacote_recebido->tamanho;
 
-    memcpy(caminho, pacote_recebido->dados_crc, tamanho);
-
-    // Insere o marcador de fim do caminho
-    caminho[tamanho] = '\0';
-
-    int status = chdir(caminho);
-
-    struct protocolo resposta;
-
-    uint8_t sequencia = seq(pacote_recebido->seq_tipo);
-
-    // Se a troca de diretorio foi realizada com sucesso, envia um OK para o cliente
-    if (status == 0) {
-        // O servidor espera um ACK apos o envio do OK
-        int ret = send_and_wait(soquete, mac_dest, mac_orig, sequencia, TIPO_OK, NULL, 0, &resposta);
-
-        // Nesse caso, ou o cliente nao recebeu o OK ou o ACK enviado pelo
-        // cliente foi perdido. Em ambos os casos, a troca ocorreu
-        if (ret != 0) fprintf(stderr, "Erro ao receber ACK apos CD bem sucedido.\n");
-            
-        return TIPO_OK;     // A troca de diretorio ocorreu mesmo sem o ACK
+    // Valida o tamanho do caminho recebido
+    if (tamanho == 0 || tamanho > CHUNCK_MAX_SIZE) {
+        fprintf(stderr, "Caminho invalido no CD.\n");
+        send_message(soquete, mac_dest, mac_orig, sequencia, TIPO_ERRO, NULL, 0);
+        return -1;
     }
 
-    // Se a troca de diretorio nao foi realizada com sucesso, envia uma mensagem de 
-    // ERRO ao cliente. Nao espera resposta
+    // Copia o caminho para um buffer e adiciona '\0'
+    char caminho[CHUNCK_MAX_SIZE + 1];
+    memcpy(caminho, pacote_recebido->dados_crc, tamanho);
+    caminho[tamanho] = '\0';
+
+    // Muda o diretorio do servidor para o caminho
+    if (chdir(caminho) == 0) {
+        ack(soquete, mac_dest, mac_orig, sequencia);
+        return 0;
+    }
+
+    // Falha no chdir (diretorio inexistente, sem permissao, etc.)
+    fprintf(stderr, "Erro ao mudar de diretorio no servidor\n");
     send_message(soquete, mac_dest, mac_orig, sequencia, TIPO_ERRO, NULL, 0);
-    return TIPO_ERRO;
+    return -1;
 }
 
 int ls_cliente (int soquete, int argc, char **argv, uint8_t *mac_dest, uint8_t *mac_orig) {
@@ -290,7 +281,7 @@ int ls_cliente (int soquete, int argc, char **argv, uint8_t *mac_dest, uint8_t *
     // === RECEBE A RESPOSTA ===
 
     status = recebe_stream(soquete, mac_orig, mac_dest, seq, TIPO_MOSTRAR, stdout);
-    fflush(stdout);
+    fflush(stdout);     // Garante a exibicao imediata
 
     return status;
 }

@@ -280,7 +280,7 @@ int ls_cliente (int soquete, int argc, char **argv, uint8_t *mac_dest, uint8_t *
 
     // === RECEBE A RESPOSTA ===
 
-    status = recebe_stream(soquete, mac_orig, mac_dest, seq, TIPO_MOSTRAR, stdout);
+    status = recebe_stream(soquete, mac_orig, mac_dest, -1, TIPO_MOSTRAR, stdout);
     fflush(stdout);     // Garante a exibicao imediata
 
     return status;

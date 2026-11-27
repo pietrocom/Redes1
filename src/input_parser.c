@@ -6,6 +6,8 @@
 #include "input_parser.h"
 #include "commands.h"
 
+#define MAX_ARGS 4
+
 enum comando {
     GET,
     PUT,
@@ -30,11 +32,19 @@ static enum comando parse_comando (const char * comando) {
     return INVALIDO;
 }
 
-static void split_input (char * input, char ** comando, char ** arg1) {
+static int split_input (char *input, char **argv, int max_args) {
     char * save_ptr;    // Usado para salvar o estado apos cada execucao (obs: isso acontece
                         // somente na variante com o _r pois nao usa a variavel estatica da biblioteca)
-    * comando = strtok_r(input, " \t\n", &save_ptr);
-    * arg1    = strtok_r(NULL , " \t\n", &save_ptr);
+    char *arg = strtok_r(input, " \t\n", &save_ptr);
+    int argc = 0;
+
+    while (arg != NULL && argc < MAX_ARGS) {    // Le enquanto houverem argumentos
+        argv[argc] = arg;
+        argc++;
+        arg = strtok_r(NULL, " \t\n", &save_ptr);
+    }
+
+    return argc; // Retorna o numero de argumentos dados
 }
 
 
@@ -46,10 +56,10 @@ int handle_input (char * input, int soquete, uint8_t *mac_cliente, uint8_t *mac_
         exit (1);
     }
 
-    char * comando;
-    char * arg1;    // Pode ser que no futuro haja comandos que aceitem mais argumentos
+    char * argv[MAX_ARGS];
+    int argc = split_input(input, argv, MAX_ARGS);
 
-    split_input(input, &comando, &arg1);
+    char * comando = argv[0];
     if (!comando) return 0; // Linha vazia
 
     enum comando parsed_comando = parse_comando(comando);
@@ -63,15 +73,23 @@ int handle_input (char * input, int soquete, uint8_t *mac_cliente, uint8_t *mac_
         break;
 
     case PUT:
-        put_cliente(soquete, arg1, mac_servidor, mac_cliente);
+        put_cliente(soquete, argv[1], mac_servidor, mac_cliente);
         break;
 
     case LS:
-        ls_cliente(soquete, arg1, mac_servidor, mac_cliente);
+        int valido = 1;
+        for (int i = 1; i < argc; i++)
+            if (strcmp(argv[i], "-l") != 0 && strcmp(argv[i], "-a") != 0) {
+                fprintf(stderr, "Flag invalida. Uso: ls -l/-a\n");
+                valido = 0;
+                break;
+            }
+        if (valido)
+            ls_cliente(soquete, argc, argv, mac_servidor, mac_cliente);
         break;
 
     case CD:
-        cd_cliente(soquete, arg1, mac_servidor, mac_cliente);
+        cd_cliente(soquete, argv[1], mac_servidor, mac_cliente);
         break;
 
     case LLS:
@@ -80,7 +98,7 @@ int handle_input (char * input, int soquete, uint8_t *mac_cliente, uint8_t *mac_
 
     case LCD:
 
-        lcd(arg1);
+        lcd(argv[1]);
         break;
 
     case EXIT:

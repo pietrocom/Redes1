@@ -67,6 +67,8 @@ int run_server(char * interface) {
             case TIPO_PUT:
                 put_servidor(&pacote_recebido, soquete, mac_client, mac_servidor);
                 break;
+            case TIPO_LS:
+                ls_servidor(&pacote_recebido, soquete, mac_client, mac_servidor);
             
             default:
                 break;

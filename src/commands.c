@@ -258,35 +258,29 @@ int cd_servidor (struct protocolo * pacote_recebido, int soquete, uint8_t *mac_d
     return TIPO_ERRO;
 }
 
-int ls_cliente (int soquete, char *path, uint8_t *mac_dest, uint8_t *mac_orig) {
+int ls_cliente (int soquete, int argc, char **argv, uint8_t *mac_dest, uint8_t *mac_orig) {
     
     struct protocolo resposta;
     memset(&resposta, 0, sizeof(struct protocolo));
 
     uint8_t seq = proxima_seq();
 
-    // === PRIMEIRA MENSAGEM (LS) ===
-    int status = send_and_wait(soquete, mac_dest, mac_orig, seq, TIPO_LS, NULL, 0, &resposta);
-
-    if (status == -1) { fprintf(stderr, "Nao foi possivel realizar o comando ls.\n"); return -1; }
-
-    // === MENSAGENS DO CAMINHO (DADOS) ===
-    FILE * file = tmpfile();
-    if (!file) { fprintf(stderr, "Erro ao criar arquivo temportario.\n"); return -1; }
-
-    // Escreve o caminho no arquivo temporario para que seja compativel com envia_stream
-    fputs(path, file);
-    int tam = tamanho_do_arquivo(file);
-    if (tam < 0 || (size_t) tam != strlen(path)) {
-        fprintf(stderr, "Erro: tamanho do arquivo temporario nao bate com o do caminho.\n");
-        fclose(file);
-        return -1;
+    uint8_t flags = 0;
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-a") == 0)
+            flags |= (1 << 0); // flag -a: 000 001
+        else if  (strcmp(argv[i], "-l") == 0)
+            flags |= (1 << 1); // flag -l: 000 010
     }
 
-    status = envia_stream(soquete, mac_dest, mac_orig, file, strlen(path), TIPO_DADOS);
-    if (status == -1) { fprintf(stderr, "Erro ao enviar os dados durante ls.\n"); fclose(file); return -1; }
-
-    fclose(file);   // Arquivo temporario apagado automaticamente
+    // === MENSAGEM LS COM FLAGS ===
+    int status;
+    if (flags > 0)
+        status = send_and_wait(soquete, mac_dest, mac_orig, seq, TIPO_LS, &flags, 1, &resposta);
+    else
+        status = send_and_wait(soquete, mac_dest, mac_orig, seq, TIPO_LS, NULL, 0, &resposta);
+    
+    int
 
     // === RECEBE A RESPOSTA ===
 
@@ -296,8 +290,31 @@ int ls_cliente (int soquete, char *path, uint8_t *mac_dest, uint8_t *mac_orig) {
 
 int ls_servidor (struct protocolo * pacote_recebido, int soquete, uint8_t *mac_dest, uint8_t *mac_orig) {
     (void) pacote_recebido; (void) soquete; (void) mac_dest; (void) mac_orig;
-    fprintf(stderr, "ls_servidor: nao implementado.\n");
-    return TIPO_ERRO;
+    
+    uint8_t  sequencia = seq(pacote_recebido->seq_tipo);
+    uint8_t flags = *pacote_recebido->dados_crc;
+
+    ack(soquete, mac_dest, mac_orig, sequencia);
+
+    int a = (flags & (1 << 0)) != 0;
+    int f = (flags & (1 << 1)) != 0;
+
+    char cmd[16] = "ls";
+    if (a) strcat(cmd, " -a");
+    if (f) strcat(cmd, " -l");
+
+    FILE *fp = popen(cmd, "r"); // Executa o comando
+    if (!fp) {
+        perror("Erro ao guardar resultado do ls");
+        return TIPO_ERRO;
+    }
+
+    char buffer[CHUNCK_MAX_SIZE];
+    size_t lidos;
+
+    while ((lidos = fred(buffer, 1, sizeof(buffer), fp)) > 0) {
+        
+    }
 }
 
 int put_cliente (int soquete, char * path, uint8_t * mac_dest, uint8_t * mac_orig) {
